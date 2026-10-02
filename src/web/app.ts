@@ -1,4 +1,6 @@
 /* Session Analysis — offline, read-only report viewer. */
+import demoData from '../../web/examples/codex-pages-report.json' with {type:'json'};
+import demoSource from './demo-source.json' with {type:'json'};
 // Viewer compiles as a standalone browser module; its type declarations mirror the shared report contract.
 type AgentName = 'claude_code' | 'codex' | 'hermes';
 type UsageCoverage = 'reported' | 'partial' | 'unavailable';
@@ -271,6 +273,65 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     }
     return [...context,...entries,...(next?[next]:[bounded(last,'Context limitation','Next action not found within 20 source lines, or a new user request/session boundary intervened.')])];
   }
+  /** Read Codex rollout records as inert text, validating identity and selected event types. */
+  export function inspectCodexLog(text: string, sessionId: string, targets: ClaudeSourceTarget[], size?: number): ClaudeSourceEntry[] {
+    if ((size !== undefined && size > MAX_FILE_BYTES) || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error('Source log exceeds the 20 MiB import limit.');
+    if (!sessionId.startsWith('codex:') || !targets.length || targets.length>40) throw new Error('Select 1–40 Codex source events.');
+    const rows=text.split('\n').map(row=>{try {const value:unknown=JSON.parse(row);return object(value)?value:null;} catch {return null;}});
+    const metadata=rows.filter(row=>row?.type==='session_meta');
+    if(metadata.length!==1 || !object(metadata[0]!.payload) || (metadata[0]!.payload.id ?? metadata[0]!.payload.session_id)!==sessionId.slice(6)) throw new Error('The selected file belongs to a different session or is not a Codex rollout.');
+    const payloadAt=(line:number):Obj|null=>{const row=rows[line-1];return row?.type==='response_item' && object(row.payload)?row.payload:null;};
+    const body=(p:Obj)=>Array.isArray(p.content)?p.content.filter(b=>object(b)&&['input_text','output_text','text'].includes(b.type)&&string(b.text)).map(b=>b.text).join('\n'):'';
+    const resultText=(value:string):string=>{
+      // Some Codex tools return serialized runner responses. Show their output
+      // as plain text while retaining the other recorded response fields.
+      try {
+        const response:unknown=JSON.parse(value);
+        if(object(response)&&string(response.output)) {
+          const {output,...metadata}=response;
+          return `Recorded response metadata: ${JSON.stringify(metadata)}\n${output}`;
+        }
+      } catch { /* Ordinary output is already text. */ }
+      return value;
+    };
+    const isText=(p:Obj,role:string)=>p.type==='message' && p.role===role && !!body(p) && !/^\s*<(?:environment_context|INSTRUCTIONS|permissions|skills_instructions)\b/i.test(body(p));
+    const calls=new Set<string>(),results=new Set<string>();
+    const bounded=(line:number,title:string,content:string,limit=4000)=>({line,title:`line ${line} · ${title}`,content:content.slice(0,limit),truncated:content.length>limit});
+    const entries=targets.map(target=>{
+      const match=/^line:([1-9]\d*)$/.exec(target.source_ref);
+      if(!match || !sourceTypes.has(target.type))throw new Error('Invalid source reference.');
+      const line=Number(match[1]),p=payloadAt(line);
+      if(!Number.isSafeInteger(line)||!p)throw new Error(`Source line ${line} is missing or is not a response item.`);
+      if(target.type==='user'||target.type==='assistant') {
+        if(!isText(p,target.type))throw new Error(`Source line ${line} does not contain expected text (injected metadata is excluded).`);
+        return bounded(line,target.type,body(p));
+      }
+      const call=target.type==='tool_call';
+      if(!(call?['function_call','custom_tool_call']:['function_call_output','custom_tool_call_output']).includes(p.type) || !string(p.call_id) || !p.call_id)throw new Error(`Source line ${line} does not contain the expected ${target.type} with a call ID.`);
+      (call?calls:results).add(p.call_id);
+      const output=Array.isArray(p.output)?p.output.map(b=>object(b)&&string(b.text)?resultText(b.text):'[Non-text content omitted]').join('\n'):string(p.output)?resultText(p.output):JSON.stringify(p.output??'');
+      return bounded(line,call?'tool call':'tool result',call?`${p.name || 'Unnamed tool'} · input (not executed)\n${p.arguments ?? p.input ?? ''}`:`Tool result\n${output}`,100_000);
+    });
+    if(calls.size && results.size && [...results].some(id=>!calls.has(id)))throw new Error('The selected tool result does not match the selected call.');
+    const first=Math.min(...entries.map(e=>e.line)),last=Math.max(...entries.map(e=>e.line));
+    const context:ClaudeSourceEntry[]=[];
+    let request:ClaudeSourceEntry|undefined,explanation:ClaudeSourceEntry|undefined,next:ClaudeSourceEntry|undefined;
+    for(let line=first-1;line>=Math.max(1,first-100);line--) {
+      const p=payloadAt(line);if(!p)continue;
+      if(isText(p,'assistant')&&!explanation)explanation=bounded(line,'Preceding assistant context',body(p));
+      if(isText(p,'user')) {request=bounded(line,'Preceding user request',body(p));break;}
+    }
+    context.push(request??bounded(first,'Context limitation','Preceding user request not found within 100 source lines.'));
+    if(explanation)context.push(explanation);
+    for(let line=last+1;line<=Math.min(rows.length,last+20);line++) {
+      const p=payloadAt(line);if(!p)continue;
+      if(p.type==='message'&&p.role==='user')break;
+      if(isText(p,'assistant')) {next=bounded(line,'Next recorded assistant context (not a verified outcome)',body(p));break;}
+      if(['function_call','custom_tool_call'].includes(p.type)) {next=bounded(line,'Next recorded action (not a verified outcome)',`${p.name}\n${p.arguments??p.input??''}`);break;}
+    }
+    return [...context,...entries,next??bounded(last,'Context limitation','Next action not found within 20 source lines, or a new user request intervened.')];
+  }
+  const demoReport=demoData as unknown as Report;
   export function parseReport(text: string, size?: number): Report {
     if ((size !== undefined && size > MAX_FILE_BYTES) || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error('Report exceeds the 20 MiB import limit.');
     let value: unknown;
@@ -310,7 +371,8 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     byId('import-error').hidden=true;
     byId('report-label').textContent=`Report ${report.report.id} · ${report.report.generated_at} · ${report.report.status}`;
     byId('demo-label').hidden=!report.report.demo;
-    byId('privacy-banner').textContent=`Privacy: Raw transcripts ${report.privacy.raw_transcripts_included?'included':'not included'}; excerpts ${report.privacy.excerpts_included?'included':'not included'}; redaction ${report.privacy.redaction_applied?'applied':'not applied'}. This report is not safe to share automatically; inspect it before sharing.`;
+    byId('demo-label').textContent=report===demoReport?'REAL SESSION · SANITIZED EXCERPT':'DEMO REPORT';
+    byId('privacy-banner').textContent=`Opened files stay in your browser; nothing is uploaded. Report contents: Raw transcripts ${report.privacy.raw_transcripts_included?'included':'not included'}; excerpts ${report.privacy.excerpts_included?'included':'not included'}; redaction ${report.privacy.redaction_applied?'applied':'not applied'}. This report is not safe to share automatically; inspect it before sharing.`;
     const limitationCounts=new Map<string,number>();
     report.coverage.limitations.forEach(item=>limitationCounts.set(item,(limitationCounts.get(item)??0)+1));
     byId('coverage-banner').textContent=`Coverage: ${report.coverage.usage} usage · ${report.report.status} report · ${limitationCounts.size} limitation type(s) (${report.coverage.limitations.length} occurrences)`;
@@ -338,7 +400,8 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
         if (file.size > MAX_FILE_BYTES) throw new Error('Source log exceeds the 20 MiB import limit.');
         const text=await file.text();
         if(!active())return;
-        const entries=inspectClaudeLog(text,selection.sessionId,selection.targets,file.size);
+        const inspect=selection.sessionId.startsWith('codex:')?inspectCodexLog:inspectClaudeLog;
+        const entries=inspect(text,selection.sessionId,selection.targets,file.size);
         byId('source-status').textContent=`Showing ${file.name || 'selected file'} locally · ${selection.sessionId}. Nothing was uploaded.`;
         const view=byId('source-view');
         for(const entry of entries) {
@@ -414,7 +477,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
           if (e && e.excerpt !== null) line(details,'pre',e.excerpt,'excerpt');
           const session=e && sessions.get(e.session_id);
           const event=session?.timeline.find(item=>item.event_id===e?.event_id && item.source_ref===e?.source_ref);
-          if (e && session?.agent==='claude_code' && /^line:[1-9]\d*$/.test(e.source_ref) && event && sourceTypes.has(event.type)) {
+          if (e && session && ['claude_code','codex'].includes(session.agent) && /^line:[1-9]\d*$/.test(e.source_ref) && event && sourceTypes.has(event.type)) {
             const button=line(details,'button','Inspect source','source-link');
             button.setAttribute('type','button');
             button.addEventListener('click',()=>{
@@ -426,9 +489,9 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
               sourceSelection={sessionId:e.session_id,targets};
               sourcePanel.hidden=false;
               clear('source-view');
-              byId('source-status').textContent=`Choose the Claude Code JSONL for ${e.session_id} to inspect ${targets.map(item=>item.source_ref).join(' and ')}. The report does not contain the raw log.`;
+              byId('source-status').textContent=`Choose the matching ${session.agent==='codex'?'Codex rollout':'Claude Code'} JSONL for ${e.session_id} to inspect ${targets.map(item=>item.source_ref).join(' and ')}. The report does not contain the raw log.`;
               sourcePanel.scrollIntoView?.({block:'start'});
-              void inspectFile(sourceFile.files?.[0]);
+              void inspectFile(report===demoReport ? new File([demoSource],'codex-pages-session.jsonl') : sourceFile.files?.[0]);
             });
           }
         });
@@ -506,31 +569,12 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     paintScope();
     return report;
   }
-  function syntheticDemo(): Report {
-    const id='hermes:synthetic-example';
-    return {
-      schema_version:'1.0.0',
-      report:{id:'synthetic-demo',generated_at:'2026-01-01T00:00:00Z',analyzer_version:'0.1.0',mode:'single_session',status:'partial',demo:true},
-      scope:{session_ids:[id],excluded_sessions:[]},
-      coverage:{usage:'partial',limitations:['Synthetic illustrative data; not derived from real sessions.','Outcome verification unavailable.']},
-      summary:{session_count:1,tool_call_count:2,finding_count:1,input_tokens:120,output_tokens:null,total_tokens:null},
-      sessions:[{id,agent:'hermes',agent_version:null,started_at:null,ended_at:null,parent_id:null,relationship:null,
-        usage:{input_tokens:120,output_tokens:null,cache_read_tokens:null,cache_write_tokens:null,reasoning_tokens:null,total_tokens:null},
-        coverage:{usage:'partial',tools:'observed',limitations:['Synthetic usage is incomplete.']},
-        metrics:{tool_call_count:2,tool_error_count:0,skill_load_count:1,event_count:2},model_runs:[],
-        timeline:[{event_id:'example-1',type:'tool_call',timestamp:null,tool_name:'example_tool',source_ref:'synthetic:1'},
-          {event_id:'example-2',type:'skill',timestamp:null,tool_name:null,source_ref:'synthetic:2'}]}],
-      metrics:{tools:[{name:'example_tool',calls:2,errors:0,output_chars:48}],skills:[{name:'example-skill',loads:1,states:['loaded']}]},
-      findings:[{id:'example-finding',category:'tool_efficiency',rule_id:'synthetic-example',title:'Repeated tool invocation (illustrative)',severity:'low',claim_type:'observed',confidence:'low',session_ids:[id],evidence_ids:['example-evidence'],observation:'Two example calls were observed.',interpretation:'Repetition does not prove wasted work.',recommendation_ids:['example-recommendation']}],
-      recommendations:[{id:'example-recommendation',title:'Inspect repetition',action:'Review source context before changing the workflow.',kind:'investigate',priority:'low',finding_ids:['example-finding'],overlap_group:null}],
-      skill_candidates:[{id:'example-candidate',title:'Example workflow candidate',trigger:'Recurring similar task',session_ids:[id],evidence_ids:['example-evidence'],recommendation:'defer',rationale:'A synthetic example cannot establish a real recurring workflow.',acceptance_tests:['Confirm with real evidence.']}],
-      evidence:[{id:'example-evidence',session_id:id,event_id:'example-1',source_ref:'synthetic:1',description:'Illustrative tool call.',excerpt:null}],
-      analysis_usage:{mode:'metrics_only',model_tokens:null,notes:['Synthetic example only.']},
-      privacy:{raw_transcripts_included:false,excerpts_included:false,redaction_applied:false,safe_to_share:null}
-    };
-  }
   export function bootstrap(doc: Document | undefined = root?.document): void {
     if (!doc) return;
+    // Data downloads also work in a standalone exported HTML report.
+    for(const [id,mime,content] of [['demo-report-download','application/json',JSON.stringify(demoData,null,2)+'\n'],['demo-session-download','application/x-ndjson',demoSource]]) {
+      doc.getElementById(id!)?.setAttribute('href',`data:${mime};charset=utf-8,${encodeURIComponent(content!)}`);
+    }
     const get = (id: string): HTMLElement => { const el = doc.getElementById(id); if (!el) throw new Error(`Missing viewer element: ${id}`); return el; };
     const error = (message: string) => { get('import-error').textContent=message;get('import-error').hidden=false; };
     const load = (text: string) => { try { renderReport(parseReport(text),doc); } catch (cause) { error(cause instanceof Error ? cause.message : 'Unable to open report.'); } };
@@ -561,10 +605,10 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     });
     get('demo-button').addEventListener('click',()=>{
       (get('agent-filter') as HTMLSelectElement).value='all';
-      renderReport(syntheticDemo(),doc);
+      renderReport(demoReport,doc);
     });
   }
-  const api = {validateReport, parseReport, inspectClaudeLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES};
+  const api = {validateReport, parseReport, inspectClaudeLog, inspectCodexLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES};
   
   if (root) {
     (root as Window & {SessionAnalysis?: typeof api}).SessionAnalysis = api;
@@ -573,4 +617,3 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       else bootstrap(root.document);
     }
   }
-

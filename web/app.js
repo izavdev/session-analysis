@@ -1,5 +1,216 @@
 "use strict";
 (() => {
+  // web/examples/codex-pages-report.json
+  var codex_pages_report_default = {
+    schema_version: "1.0.0",
+    report: {
+      id: "codex-pages-demo",
+      generated_at: "2026-10-02T22:19:44.204Z",
+      analyzer_version: "0.1.0",
+      mode: "single_session",
+      status: "partial",
+      demo: true
+    },
+    scope: {
+      session_ids: [
+        "codex:pages-demo"
+      ],
+      excluded_sessions: []
+    },
+    coverage: {
+      usage: "unavailable",
+      limitations: [
+        "Sanitized excerpt of a real repo session (2026-10-02): eight selected events; personal paths and IDs replaced. Counts cover only this excerpt. Usage snapshots omitted.",
+        "Task outcomes are unknown; successful tool calls do not verify outcomes."
+      ]
+    },
+    summary: {
+      session_count: 1,
+      tool_call_count: 2,
+      finding_count: 1,
+      input_tokens: null,
+      output_tokens: null,
+      total_tokens: null
+    },
+    sessions: [
+      {
+        id: "codex:pages-demo",
+        agent: "codex",
+        agent_version: "0.160.0",
+        started_at: "2026-10-02T21:56:51.081Z",
+        ended_at: "2026-10-02T22:02:13.146Z",
+        parent_id: null,
+        relationship: null,
+        usage: {
+          input_tokens: null,
+          output_tokens: null,
+          cache_read_tokens: null,
+          cache_write_tokens: null,
+          reasoning_tokens: null,
+          total_tokens: null
+        },
+        coverage: {
+          usage: "unavailable",
+          tools: "observed",
+          limitations: [
+            "Sanitized excerpt of a real repo session (2026-10-02): eight selected events; personal paths and IDs replaced. Counts cover only this excerpt. Usage snapshots omitted."
+          ]
+        },
+        metrics: {
+          tool_call_count: 2,
+          tool_error_count: 0,
+          skill_load_count: 0,
+          event_count: 8
+        },
+        model_runs: [],
+        timeline: [
+          {
+            event_id: "codex:pages-demo:e1",
+            type: "user",
+            timestamp: "2026-10-02T21:59:57.992Z",
+            tool_name: null,
+            source_ref: "line:2"
+          },
+          {
+            event_id: "codex:pages-demo:e2",
+            type: "assistant",
+            timestamp: "2026-10-02T22:00:01.717Z",
+            tool_name: null,
+            source_ref: "line:3"
+          },
+          {
+            event_id: "codex:pages-demo:e3",
+            type: "assistant",
+            timestamp: "2026-10-02T22:00:49.868Z",
+            tool_name: null,
+            source_ref: "line:4"
+          },
+          {
+            event_id: "codex:pages-demo:e4",
+            type: "tool_call",
+            timestamp: "2026-10-02T22:02:00.542Z",
+            tool_name: "exec",
+            source_ref: "line:5"
+          },
+          {
+            event_id: "codex:pages-demo:e5",
+            type: "tool_result",
+            timestamp: "2026-10-02T22:02:01.732Z",
+            tool_name: null,
+            source_ref: "line:6"
+          },
+          {
+            event_id: "codex:pages-demo:e6",
+            type: "tool_call",
+            timestamp: "2026-10-02T22:02:06.158Z",
+            tool_name: "exec",
+            source_ref: "line:7"
+          },
+          {
+            event_id: "codex:pages-demo:e7",
+            type: "tool_result",
+            timestamp: "2026-10-02T22:02:06.252Z",
+            tool_name: null,
+            source_ref: "line:8"
+          },
+          {
+            event_id: "codex:pages-demo:e8",
+            type: "assistant",
+            timestamp: "2026-10-02T22:02:13.146Z",
+            tool_name: null,
+            source_ref: "line:9"
+          }
+        ]
+      }
+    ],
+    metrics: {
+      tools: [
+        {
+          name: "exec",
+          calls: 2,
+          errors: 0,
+          output_chars: 11671
+        }
+      ],
+      skills: []
+    },
+    findings: [
+      {
+        id: "demo-verification",
+        category: "outcome_verification",
+        rule_id: "demo_verification_review",
+        title: "Check the recorded build verification",
+        severity: "low",
+        claim_type: "observed",
+        confidence: "high",
+        session_ids: [
+          "codex:pages-demo"
+        ],
+        evidence_ids: [
+          "demo-start-call",
+          "demo-start-result",
+          "demo-call",
+          "demo-result"
+        ],
+        observation: "The excerpt records a test/build invocation and a follow-up that collects its output.",
+        interpretation: "Check evidence to compare the recorded commands and results with the closing claim. This excerpt does not establish that the site was deployed or identify an avoidable problem.",
+        recommendation_ids: []
+      }
+    ],
+    recommendations: [],
+    skill_candidates: [],
+    evidence: [
+      {
+        id: "demo-start-result",
+        session_id: "codex:pages-demo",
+        event_id: "codex:pages-demo:e5",
+        source_ref: "line:6",
+        description: "Initial output; test process still running.",
+        excerpt: null
+      },
+      {
+        id: "demo-start-call",
+        session_id: "codex:pages-demo",
+        event_id: "codex:pages-demo:e4",
+        source_ref: "line:5",
+        description: "Recorded test/build invocation.",
+        excerpt: null
+      },
+      {
+        id: "demo-call",
+        session_id: "codex:pages-demo",
+        event_id: "codex:pages-demo:e6",
+        source_ref: "line:7",
+        description: "Follow-up tool input collecting test/build output.",
+        excerpt: null
+      },
+      {
+        id: "demo-result",
+        session_id: "codex:pages-demo",
+        event_id: "codex:pages-demo:e7",
+        source_ref: "line:8",
+        description: "Recorded tool output for that follow-up.",
+        excerpt: null
+      }
+    ],
+    analysis_usage: {
+      mode: "assisted",
+      model_tokens: null,
+      notes: [
+        "Metrics computed locally from the sanitized excerpt. One editorial review observation added for the evidence demo; no actionable recommendations or savings estimates."
+      ]
+    },
+    privacy: {
+      raw_transcripts_included: false,
+      excerpts_included: false,
+      redaction_applied: true,
+      safe_to_share: null
+    }
+  };
+
+  // src/web/demo-source.json
+  var demo_source_default = '{"type": "session_meta", "payload": {"id": "pages-demo", "timestamp": "2026-10-02T21:56:51.081Z", "cli_version": "0.160.0"}}\n{"timestamp": "2026-10-02T21:59:57.992Z", "type": "response_item", "payload": {"type": "message", "role": "user", "content": [{"type": "input_text", "text": "make sure that this repo is GitHub Pages compatible as I wanted the report page to be pretty static"}]}}\n{"timestamp": "2026-10-02T22:00:01.717Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "I\u2019ll check how the report is built and served, then make any changes needed for a static GitHub Pages deployment."}]}}\n{"timestamp": "2026-10-02T22:00:49.868Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "The viewer already uses static HTML, CSS, and browser JavaScript, with relative links that work under a GitHub Pages repository URL. Reports are read locally in the browser. I\u2019ll add a dedicated static build and Pages workflow that publishes only the viewer assets."}]}}\n{"timestamp": "2026-10-02T22:02:00.542Z", "type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "demo-call-1", "name": "exec", "input": "text(await tools.apply_patch(\\"*** Begin Patch\\\\n*** Add File: /workspace/session-analysis/tests/pages.test.mts\\\\n+import test from \'node:test\';\\\\n+import assert from \'node:assert/strict\';\\\\n+import { execFileSync } from \'node:child_process\';\\\\n+import { readFileSync, readdirSync, writeFileSync } from \'node:fs\';\\\\n+import { fileURLToPath } from \'node:url\';\\\\n+\\\\n+test(\'Pages artifact excludes stale reports and resolves assets and navigation under repository paths\', () => {\\\\n+  const builder = fileURLToPath(new URL(\'../scripts/build-pages.mjs\', import.meta.url));\\\\n+  const site = new URL(\'../_site/\', import.meta.url);\\\\n+  execFileSync(process.execPath, [builder]);\\\\n+  writeFileSync(new URL(\'private-report.json\', site), \'{\\\\\\"private\\\\\\":true}\');\\\\n+  execFileSync(process.execPath, [builder]);\\\\n+  const files = readdirSync(site).sort();\\\\n+  assert.deepEqual(files, [\'.nojekyll\', \'app.js\', \'index.html\', \'setup.html\', \'style.css\']);\\\\n+  for (const base of [\'https://example.github.io/session-analysis/\', \'https://reports.example.com/\']) {\\\\n+    for (const page of [\'index.html\', \'setup.html\']) {\\\\n+      const html = readFileSync(new URL(page, site), \'utf8\');\\\\n+      for (const [, reference] of html.matchAll(/(?:href|src)=\\\\\\"([^\\\\\\"]+)\\\\\\"/g)) {\\\\n+        if (reference.startsWith(\'https://\') || reference.startsWith(\'#\')) continue;\\\\n+        const resolved = new URL(reference, new URL(page, base));\\\\n+        assert.ok(resolved.href.startsWith(base), `${reference} must stay under ${base}`);\\\\n+        assert.ok(files.includes(resolved.href.slice(base.length)), `${reference} must exist in the artifact`);\\\\n+      }\\\\n+    }\\\\n+  }\\\\n+  const script = readFileSync(new URL(\'app.js\', site), \'utf8\');\\\\n+  assert.doesNotMatch(script, /\\\\\\\\b(?:fetch|XMLHttpRequest|WebSocket|EventSource)\\\\\\\\s*\\\\\\\\(/);\\\\n+  assert.doesNotMatch(script, /\\\\\\\\b(?:localStorage|sessionStorage|indexedDB)\\\\\\\\b/);\\\\n+});\\\\n*** End Patch\\"));\\ntext(await tools.exec_command({cmd:\\"npm test; npm run build:pages; git diff --check; git status --short\\",\\"max_output_tokens\\":5000,\\"yield_time_ms\\":1000}));\\n"}}\n{"timestamp": "2026-10-02T22:02:01.732Z", "type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "demo-call-1", "output": [{"type": "input_text", "text": "Script completed\\nWall time 1.2 seconds\\nOutput:\\n"}, {"type": "input_text", "text": "{}"}, {"type": "input_text", "text": "{\\"chunk_id\\":\\"186b41\\",\\"wall_time_seconds\\":1.001582666,\\"session_id\\":8446,\\"original_token_count\\":440,\\"output\\":\\"\\\\n> agent-session-analysis@0.2.0 test\\\\n> npm run build && node --test tests/*.test.mts\\\\n\\\\n\\\\n> agent-session-analysis@0.2.0 build\\\\n> tsc -p tsconfig.json && tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js\\\\n\\\\n\\\\n  web/app.js  36.4kb\\\\n\\\\n\u26A1 Done in 9ms\\\\n\u2714 Claude native fixture normalizes cache-inclusive input and source references (2.343125ms)\\\\n\u2714 Claude deduplicates UUID and message usage while linking skills and tool results (2.433ms)\\\\n\u2714 partial Claude usage retains known subtotals but not total (0.809709ms)\\\\n\u2714 Claude skips preamble and warns with reference only (0.763417ms)\\\\n\u2714 Claude metadata user records do not become repeatable user requests (1.071083ms)\\\\n\u2714 Claude groups ignored record warnings by safe type instead of one per line (0.809708ms)\\\\n\u2714 Codex rollout uses latest cumulative snapshot and observes native calls and skill reads (1.385542ms)\\\\n\u2714 Codex exec counts each completed turn and completed command only (1.966625ms)\\\\n\u2714 Hermes SQLite introspects native columns, closes read-only and preserves counters (7.949458ms)\\\\n\u2714 Hermes sparse schema preserves parent, missing counters, unknown roles (4.54325ms)\\\\n\u2714 Hermes historical role-message JSONL requires explicit selection (1.58925ms)\\\\n\u2714 malformed final JSONL is warned, malformed interior and initial lines rejected without private text (1.507542ms)\\\\n\u2714 explicit mismatch, unsupported source and directory traversal reject correctly (5.10925ms)\\\\n\u2714 invalid agent errors never echo attacker-controlled input (0.551459ms)\\\\n\u2714 Codex cumulative partial usage retains known values without claiming total (1.57925ms)\\\\n\u2714 discover checks names only, root override, filters and environment override (12.460958ms)\\\\n\\"}"}]}}\n{"timestamp": "2026-10-02T22:02:06.158Z", "type": "response_item", "payload": {"type": "custom_tool_call", "call_id": "demo-call-2", "name": "exec", "input": "text(await tools.write_stdin({session_id:8446,chars:\\"\\",yield_time_ms:1000,max_output_tokens:5000}));\\ntext(await tools.exec_command({cmd:\\"git diff --stat; git diff -- package.json .gitignore README.md; ls -la _site\\",\\"max_output_tokens\\":3500}));\\n"}}\n{"timestamp": "2026-10-02T22:02:06.252Z", "type": "response_item", "payload": {"type": "custom_tool_call_output", "call_id": "demo-call-2", "output": [{"type": "input_text", "text": "Script completed\\nWall time 0.1 seconds\\nOutput:\\n"}, {"type": "input_text", "text": "{\\"chunk_id\\":\\"84971f\\",\\"wall_time_seconds\\":0.000012,\\"exit_code\\":0,\\"original_token_count\\":1258,\\"output\\":\\"\u2714 CLI exposes all local workflow commands (62.710417ms)\\\\n\u2714 missing report produces concise error, not a stack trace (45.666208ms)\\\\n\u2714 directory import cannot write over its own source file (48.482625ms)\\\\n\u2714 directory import cannot write into nested new directories through a symlink (44.237333ms)\\\\n\u2714 unknown usage remains null and known zero remains zero; duplicate identities are excluded (5.601084ms)\\\\n\u2714 linked errors, large results, repeated calls and skill loads are evidenced without transcript leakage (253.042833ms)\\\\n\u2714 large source read stays evidenced without automatic recommendations or cost claims (0.426208ms)\\\\n\u2714 recurring requests are deferred, inferred candidates with evidence in both sessions (1.201208ms)\\\\n\u2714 session controls are retained in the timeline but never become recurring workflow candidates (0.61475ms)\\\\n\u2714 contiguous identical explicit failures form one review-only sequence with recovery evidence (0.439292ms)\\\\n\u2714 single failed call followed by same-call explicit non-error result retains recovery evidence as Activity (0.226584ms)\\\\n\u2714 single explicit error with empty text still retains exact retry recovery evidence (0.169125ms)\\\\n\u2714 single failure does not claim recovery from an unknown result or across an intervening action (0.96ms)\\\\n\u2714 changed command, tool, error text or intervening action cannot establish repeated failure (8.679167ms)\\\\n\u2714 unknown results do not claim explicit recovery for an established failure episode (0.289125ms)\\\\n\u2714 separate retry episodes stay separate and ambiguous parallel results do not qualify (0.510375ms)\\\\n\u2714 model runs, limitations, and partial known subtotals retain provenance (0.464333ms)\\\\n\u2714 provider-only events do not create phantom model switches (0.38ms)\\\\n\u2714 reported coverage is downgraded when reported session total is missing (0.158417ms)\\\\n\u2714 ignored source records keep reported usage but make overall coverage partial (0.145667ms)\\\\n\u2714 packet fits serialized character budget and never includes dangling findings (0.434708ms)\\\\n\u2714 manual merge accepts only evidenced inferred additions without mutating original (0.646834ms)\\\\n\u2714 offline export inlines assets once and safely embeds JSON (5.392208ms)\\\\n\u2714 three native adapters analyze, validate, packet, and export offline HTML (214.624042ms)\\\\n\u2714 Pages artifact excludes stale reports and resolves assets and navigation under repository paths (101.61425ms)\\\\n\u2714 generated report matches schema root and validates (6.49575ms)\\\\n\u2714 rejects unexpected fields, invalid timestamps, versions, enums, counts, and null contradictions (1.778916ms)\\\\n\u2714 all cross references and evidence ownership must resolve (1.040125ms)\\\\n\u2714 candidate evidence must belong to declared session (0.28275ms)\\\\n\u2714 offline shell and public API validate and safely import reports (29.591833ms)\\\\n\u2714 DOM displays evidence as text, inspect timeline, preserve unknown totals and privacy (1.738708ms)\\\\n\u2714 ordinary activity never becomes advice, including legacy reports with automatic recommendations (0.31775ms)\\\\n\u2714 investigation is review-only while specific evidenced interventions appear as suggestions (0.472ms)\\\\n\u2714 source inspector opens the exact Claude call and result from selected local JSONL without embedding them in the report (3.524833ms)\\\\n\u2714 local source inspection rejects a different Claude session and does not display its contents (0.230542ms)\\\\n\u2714 closing or replacing the report discards a pending local source read (3.616708ms)\\\\n\u2714 source drilldown explains reads and includes bounded surrounding intent and next action (0.611917ms)\\\\n\u2714 recurring request evidence can inspect its actual local user message without importing injected metadata (0.179625ms)\\\\n\u2714 read descriptions distinguish native ranges from shell flags and malformed syntax (0.275ms)\\\\n\u2714 source drilldown does not guess complex shell intent or cross session boundaries (0.150208ms)\\\\n\u2714 inspector shows unique known models instead of alternating unavailable placeholders (0.287875ms)\\\\n\u2714 repeated diagnostics are grouped by meaning without discarding occurrences or evidence (0.483958ms)\\\\n\u2714 embedded report, filter and clear keep scope and report-wide metrics (0.316292ms)\\\\n\u2714 drop import enforces size before reading and reports invalid JSON (1.767791ms)\\\\n\u2714 demo is labeled synthetic and resets filter (0.318458ms)\\\\n\u2714 browser module attaches API and initializes once DOM is ready (3.077083ms)\\\\n\u2714 local file viewer boots its compiled script and the demo button renders (2.895417ms)\\\\n\u2139 tests 63\\\\n\u2139 suites 0\\\\n\u2139 pass 63\\\\n\u2139 fail 0\\\\n\u2139 cancelled 0\\\\n\u2139 skipped 0\\\\n\u2139 todo 0\\\\n\u2139 duration_ms 451.147041\\\\n\\\\n> agent-session-analysis@0.2.0 build:pages\\\\n> npm run build:viewer && node scripts/build-pages.mjs\\\\n\\\\n\\\\n> agent-session-analysis@0.2.0 build:viewer\\\\n> tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js\\\\n\\\\n\\\\n  web/app.js  36.4kb\\\\n\\\\n\u26A1 Done in 3ms\\\\nStatic viewer built in _site/\\\\n M .gitignore\\\\n M README.md\\\\n M package.json\\\\n?? .github/\\\\n?? scripts/\\\\n?? tests/pages.test.mts\\\\n\\"}"}, {"type": "input_text", "text": "{\\"chunk_id\\":\\"5fa706\\",\\"wall_time_seconds\\":0.000007292,\\"exit_code\\":0,\\"original_token_count\\":995,\\"output\\":\\" .gitignore   |  1 +\\\\n README.md    | 15 ++++++++++++++-\\\\n package.json |  2 ++\\\\n 3 files changed, 17 insertions(+), 1 deletion(-)\\\\ndiff --git a/.gitignore b/.gitignore\\\\nindex 214eade..1ea04de 100644\\\\n--- a/.gitignore\\\\n+++ b/.gitignore\\\\n@@ -1,4 +1,5 @@\\\\n node_modules/\\\\n dist/\\\\n+_site/\\\\n .DS_Store\\\\n *.tsbuildinfo\\\\ndiff --git a/README.md b/README.md\\\\nindex 5292201..6e9e8d1 100644\\\\n--- a/README.md\\\\n+++ b/README.md\\\\n@@ -17,7 +17,20 @@ npx --no-install session-analysis validate report.json\\\\n npx --no-install session-analysis export report.json -o report.html\\\\n ```\\\\n \\\\n-Open `report.html` directly. Alternatively, open `web/index.html` and drop a generated JSON report. The same web directory is a static site suitable for static hosting; this repository does not publish anything automatically. The website reads report files in the browser, not on a server.\\\\n+Open `report.html` directly. Alternatively, open `web/index.html` and drop a generated JSON report. The website reads report files in the browser, not on a server.\\\\n+\\\\n+## GitHub Pages\\\\n+\\\\n+The report viewer is entirely static: HTML, CSS, and browser JavaScript, with no backend or runtime Node requirement. Reports and source logs selected in the viewer stay in browser memory. Analysis still runs locally through the CLI.\\\\n+\\\\n+```sh\\\\n+npm ci\\\\n+npm run build:pages\\\\n+```\\\\n+\\\\n+Publish the generated `_site/` directory to any static host. It contains only `index.html`, `setup.html`, `style.css`, `app.js`, and `.nojekyll`; the build recreates this directory to discard stale files. Reports, logs, fixtures, and CLI code are excluded. Relative asset and navigation URLs support both a repository path such as `/session-analysis/` and a custom domain, without rewrites or base-path configuration. The existing offline viewer and exported HTML continue to work.\\\\n+\\\\n+For GitHub Pages, select **Settings \u2192 Pages \u2192 Build and deployment \u2192 Source \u2192 GitHub Actions** ([GitHub setup documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)). The included `.github/workflows/pages.yml` tests and builds on pushes and pull requests, then publishes on default-branch pushes or a manual run on the default branch. Allow that branch in the `github-pages` environment\'s deployment rules. No GitHub settings are changed by the local build.\\\\n \\\\n For Claude Code tool or request evidence, expand an observation\'s Evidence list (ordinary reads are in the collapsed **Activity** section), click **Inspect source**, and choose the matching session `.jsonl` (up to 20 MiB). User/assistant text evidence can be viewed locally too; injected metadata is rejected. For tool evidence, the local inspector shows:\\\\n - A readable description for supported literal `cat`/`sed` reads or a native `Read` input; otherwise the original tool input, without guessing intent or running commands.\\\\ndiff --git a/package.json b/package.json\\\\nindex 5e98b07..126dc6f 100644\\\\n--- a/package.json\\\\n+++ b/package.json\\\\n@@ -21,6 +21,8 @@\\\\n     \\\\\\"README.md\\\\\\"\\\\n   ],\\\\n   \\\\\\"scripts\\\\\\": {\\\\n+    \\\\\\"build:viewer\\\\\\": \\\\\\"tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js\\\\\\",\\\\n+    \\\\\\"build:pages\\\\\\": \\\\\\"npm run build:viewer && node scripts/build-pages.mjs\\\\\\",\\\\n     \\\\\\"build\\\\\\": \\\\\\"tsc -p tsconfig.json && tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js\\\\\\",\\\\n     \\\\\\"check\\\\\\": \\\\\\"tsc -p tsconfig.json --noEmit && tsc -p tsconfig.viewer.json --noEmit\\\\\\",\\\\n     \\\\\\"test\\\\\\": \\\\\\"npm run build && node --test tests/*.test.mts\\\\\\"\\\\ntotal 144\\\\ndrwxr-xr-x@  7 admin  staff    224 Oct  3 00:02 .\\\\ndrwxr-xr-x  22 admin  staff    704 Oct  3 00:02 ..\\\\n-rw-r--r--@  1 admin  staff      0 Oct  3 00:02 .nojekyll\\\\n-rw-r--r--@  1 admin  staff  37264 Oct  3 00:02 app.js\\\\n-rw-r--r--@  1 admin  staff   6180 Oct  3 00:02 index.html\\\\n-rw-r--r--@  1 admin  staff   4823 Oct  3 00:02 setup.html\\\\n-rw-r--r--@  1 admin  staff  12689 Oct  3 00:02 style.css\\\\n\\"}"}]}}\n{"timestamp": "2026-10-02T22:02:13.146Z", "type": "response_item", "payload": {"type": "message", "role": "assistant", "content": [{"type": "output_text", "text": "The repo is ready for GitHub Pages. Added a static build and deployment workflow that publishes only viewer assets; reports stay in browser memory.\\n\\nAll 63 tests pass, including repository-path links and exclusion of stale reports.\\n\\nTo enable publishing, set **Settings \u2192 Pages \u2192 Source \u2192 GitHub Actions**, then push these changes to the default branch. [GitHub setup guide](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)."}]}}\n';
+
   // src/web/app.ts
   var root = typeof window === "undefined" ? void 0 : window;
   var object = (v) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -177,6 +388,88 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
     }
     return [...context, ...entries, ...next ? [next] : [bounded(last, "Context limitation", "Next action not found within 20 source lines, or a new user request/session boundary intervened.")]];
   }
+  function inspectCodexLog(text, sessionId, targets, size) {
+    if (size !== void 0 && size > MAX_FILE_BYTES || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error("Source log exceeds the 20 MiB import limit.");
+    if (!sessionId.startsWith("codex:") || !targets.length || targets.length > 40) throw new Error("Select 1\u201340 Codex source events.");
+    const rows = text.split("\n").map((row) => {
+      try {
+        const value = JSON.parse(row);
+        return object(value) ? value : null;
+      } catch {
+        return null;
+      }
+    });
+    const metadata = rows.filter((row) => row?.type === "session_meta");
+    if (metadata.length !== 1 || !object(metadata[0].payload) || (metadata[0].payload.id ?? metadata[0].payload.session_id) !== sessionId.slice(6)) throw new Error("The selected file belongs to a different session or is not a Codex rollout.");
+    const payloadAt = (line) => {
+      const row = rows[line - 1];
+      return row?.type === "response_item" && object(row.payload) ? row.payload : null;
+    };
+    const body = (p) => Array.isArray(p.content) ? p.content.filter((b) => object(b) && ["input_text", "output_text", "text"].includes(b.type) && string(b.text)).map((b) => b.text).join("\n") : "";
+    const resultText = (value) => {
+      try {
+        const response = JSON.parse(value);
+        if (object(response) && string(response.output)) {
+          const { output, ...metadata2 } = response;
+          return `Recorded response metadata: ${JSON.stringify(metadata2)}
+${output}`;
+        }
+      } catch {
+      }
+      return value;
+    };
+    const isText = (p, role) => p.type === "message" && p.role === role && !!body(p) && !/^\s*<(?:environment_context|INSTRUCTIONS|permissions|skills_instructions)\b/i.test(body(p));
+    const calls = /* @__PURE__ */ new Set(), results = /* @__PURE__ */ new Set();
+    const bounded = (line, title, content, limit = 4e3) => ({ line, title: `line ${line} \xB7 ${title}`, content: content.slice(0, limit), truncated: content.length > limit });
+    const entries = targets.map((target) => {
+      const match = /^line:([1-9]\d*)$/.exec(target.source_ref);
+      if (!match || !sourceTypes.has(target.type)) throw new Error("Invalid source reference.");
+      const line = Number(match[1]), p = payloadAt(line);
+      if (!Number.isSafeInteger(line) || !p) throw new Error(`Source line ${line} is missing or is not a response item.`);
+      if (target.type === "user" || target.type === "assistant") {
+        if (!isText(p, target.type)) throw new Error(`Source line ${line} does not contain expected text (injected metadata is excluded).`);
+        return bounded(line, target.type, body(p));
+      }
+      const call = target.type === "tool_call";
+      if (!(call ? ["function_call", "custom_tool_call"] : ["function_call_output", "custom_tool_call_output"]).includes(p.type) || !string(p.call_id) || !p.call_id) throw new Error(`Source line ${line} does not contain the expected ${target.type} with a call ID.`);
+      (call ? calls : results).add(p.call_id);
+      const output = Array.isArray(p.output) ? p.output.map((b) => object(b) && string(b.text) ? resultText(b.text) : "[Non-text content omitted]").join("\n") : string(p.output) ? resultText(p.output) : JSON.stringify(p.output ?? "");
+      return bounded(line, call ? "tool call" : "tool result", call ? `${p.name || "Unnamed tool"} \xB7 input (not executed)
+${p.arguments ?? p.input ?? ""}` : `Tool result
+${output}`, 1e5);
+    });
+    if (calls.size && results.size && [...results].some((id) => !calls.has(id))) throw new Error("The selected tool result does not match the selected call.");
+    const first = Math.min(...entries.map((e) => e.line)), last = Math.max(...entries.map((e) => e.line));
+    const context = [];
+    let request, explanation, next;
+    for (let line = first - 1; line >= Math.max(1, first - 100); line--) {
+      const p = payloadAt(line);
+      if (!p) continue;
+      if (isText(p, "assistant") && !explanation) explanation = bounded(line, "Preceding assistant context", body(p));
+      if (isText(p, "user")) {
+        request = bounded(line, "Preceding user request", body(p));
+        break;
+      }
+    }
+    context.push(request ?? bounded(first, "Context limitation", "Preceding user request not found within 100 source lines."));
+    if (explanation) context.push(explanation);
+    for (let line = last + 1; line <= Math.min(rows.length, last + 20); line++) {
+      const p = payloadAt(line);
+      if (!p) continue;
+      if (p.type === "message" && p.role === "user") break;
+      if (isText(p, "assistant")) {
+        next = bounded(line, "Next recorded assistant context (not a verified outcome)", body(p));
+        break;
+      }
+      if (["function_call", "custom_tool_call"].includes(p.type)) {
+        next = bounded(line, "Next recorded action (not a verified outcome)", `${p.name}
+${p.arguments ?? p.input ?? ""}`);
+        break;
+      }
+    }
+    return [...context, ...entries, next ?? bounded(last, "Context limitation", "Next action not found within 20 source lines, or a new user request intervened.")];
+  }
+  var demoReport = codex_pages_report_default;
   function parseReport(text, size) {
     if (size !== void 0 && size > MAX_FILE_BYTES || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error("Report exceeds the 20 MiB import limit.");
     let value;
@@ -237,7 +530,8 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
     byId("import-error").hidden = true;
     byId("report-label").textContent = `Report ${report.report.id} \xB7 ${report.report.generated_at} \xB7 ${report.report.status}`;
     byId("demo-label").hidden = !report.report.demo;
-    byId("privacy-banner").textContent = `Privacy: Raw transcripts ${report.privacy.raw_transcripts_included ? "included" : "not included"}; excerpts ${report.privacy.excerpts_included ? "included" : "not included"}; redaction ${report.privacy.redaction_applied ? "applied" : "not applied"}. This report is not safe to share automatically; inspect it before sharing.`;
+    byId("demo-label").textContent = report === demoReport ? "REAL SESSION \xB7 SANITIZED EXCERPT" : "DEMO REPORT";
+    byId("privacy-banner").textContent = `Opened files stay in your browser; nothing is uploaded. Report contents: Raw transcripts ${report.privacy.raw_transcripts_included ? "included" : "not included"}; excerpts ${report.privacy.excerpts_included ? "included" : "not included"}; redaction ${report.privacy.redaction_applied ? "applied" : "not applied"}. This report is not safe to share automatically; inspect it before sharing.`;
     const limitationCounts = /* @__PURE__ */ new Map();
     report.coverage.limitations.forEach((item) => limitationCounts.set(item, (limitationCounts.get(item) ?? 0) + 1));
     byId("coverage-banner").textContent = `Coverage: ${report.coverage.usage} usage \xB7 ${report.report.status} report \xB7 ${limitationCounts.size} limitation type(s) (${report.coverage.limitations.length} occurrences)`;
@@ -267,7 +561,8 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
         if (file.size > MAX_FILE_BYTES) throw new Error("Source log exceeds the 20 MiB import limit.");
         const text = await file.text();
         if (!active()) return;
-        const entries = inspectClaudeLog(text, selection.sessionId, selection.targets, file.size);
+        const inspect = selection.sessionId.startsWith("codex:") ? inspectCodexLog : inspectClaudeLog;
+        const entries = inspect(text, selection.sessionId, selection.targets, file.size);
         byId("source-status").textContent = `Showing ${file.name || "selected file"} locally \xB7 ${selection.sessionId}. Nothing was uploaded.`;
         const view = byId("source-view");
         for (const entry of entries) {
@@ -364,7 +659,7 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
           if (e && e.excerpt !== null) line(details, "pre", e.excerpt, "excerpt");
           const session = e && sessions.get(e.session_id);
           const event = session?.timeline.find((item) => item.event_id === e?.event_id && item.source_ref === e?.source_ref);
-          if (e && session?.agent === "claude_code" && /^line:[1-9]\d*$/.test(e.source_ref) && event && sourceTypes.has(event.type)) {
+          if (e && session && ["claude_code", "codex"].includes(session.agent) && /^line:[1-9]\d*$/.test(e.source_ref) && event && sourceTypes.has(event.type)) {
             const button = line(details, "button", "Inspect source", "source-link");
             button.setAttribute("type", "button");
             button.addEventListener("click", () => {
@@ -376,9 +671,9 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
               sourceSelection = { sessionId: e.session_id, targets };
               sourcePanel.hidden = false;
               clear("source-view");
-              byId("source-status").textContent = `Choose the Claude Code JSONL for ${e.session_id} to inspect ${targets.map((item) => item.source_ref).join(" and ")}. The report does not contain the raw log.`;
+              byId("source-status").textContent = `Choose the matching ${session.agent === "codex" ? "Codex rollout" : "Claude Code"} JSONL for ${e.session_id} to inspect ${targets.map((item) => item.source_ref).join(" and ")}. The report does not contain the raw log.`;
               sourcePanel.scrollIntoView?.({ block: "start" });
-              void inspectFile(sourceFile.files?.[0]);
+              void inspectFile(report === demoReport ? new File([demo_source_default], "codex-pages-session.jsonl") : sourceFile.files?.[0]);
             });
           }
         });
@@ -470,42 +765,11 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
     paintScope();
     return report;
   }
-  function syntheticDemo() {
-    const id = "hermes:synthetic-example";
-    return {
-      schema_version: "1.0.0",
-      report: { id: "synthetic-demo", generated_at: "2026-01-01T00:00:00Z", analyzer_version: "0.1.0", mode: "single_session", status: "partial", demo: true },
-      scope: { session_ids: [id], excluded_sessions: [] },
-      coverage: { usage: "partial", limitations: ["Synthetic illustrative data; not derived from real sessions.", "Outcome verification unavailable."] },
-      summary: { session_count: 1, tool_call_count: 2, finding_count: 1, input_tokens: 120, output_tokens: null, total_tokens: null },
-      sessions: [{
-        id,
-        agent: "hermes",
-        agent_version: null,
-        started_at: null,
-        ended_at: null,
-        parent_id: null,
-        relationship: null,
-        usage: { input_tokens: 120, output_tokens: null, cache_read_tokens: null, cache_write_tokens: null, reasoning_tokens: null, total_tokens: null },
-        coverage: { usage: "partial", tools: "observed", limitations: ["Synthetic usage is incomplete."] },
-        metrics: { tool_call_count: 2, tool_error_count: 0, skill_load_count: 1, event_count: 2 },
-        model_runs: [],
-        timeline: [
-          { event_id: "example-1", type: "tool_call", timestamp: null, tool_name: "example_tool", source_ref: "synthetic:1" },
-          { event_id: "example-2", type: "skill", timestamp: null, tool_name: null, source_ref: "synthetic:2" }
-        ]
-      }],
-      metrics: { tools: [{ name: "example_tool", calls: 2, errors: 0, output_chars: 48 }], skills: [{ name: "example-skill", loads: 1, states: ["loaded"] }] },
-      findings: [{ id: "example-finding", category: "tool_efficiency", rule_id: "synthetic-example", title: "Repeated tool invocation (illustrative)", severity: "low", claim_type: "observed", confidence: "low", session_ids: [id], evidence_ids: ["example-evidence"], observation: "Two example calls were observed.", interpretation: "Repetition does not prove wasted work.", recommendation_ids: ["example-recommendation"] }],
-      recommendations: [{ id: "example-recommendation", title: "Inspect repetition", action: "Review source context before changing the workflow.", kind: "investigate", priority: "low", finding_ids: ["example-finding"], overlap_group: null }],
-      skill_candidates: [{ id: "example-candidate", title: "Example workflow candidate", trigger: "Recurring similar task", session_ids: [id], evidence_ids: ["example-evidence"], recommendation: "defer", rationale: "A synthetic example cannot establish a real recurring workflow.", acceptance_tests: ["Confirm with real evidence."] }],
-      evidence: [{ id: "example-evidence", session_id: id, event_id: "example-1", source_ref: "synthetic:1", description: "Illustrative tool call.", excerpt: null }],
-      analysis_usage: { mode: "metrics_only", model_tokens: null, notes: ["Synthetic example only."] },
-      privacy: { raw_transcripts_included: false, excerpts_included: false, redaction_applied: false, safe_to_share: null }
-    };
-  }
   function bootstrap(doc = root?.document) {
     if (!doc) return;
+    for (const [id, mime, content] of [["demo-report-download", "application/json", JSON.stringify(codex_pages_report_default, null, 2) + "\n"], ["demo-session-download", "application/x-ndjson", demo_source_default]]) {
+      doc.getElementById(id)?.setAttribute("href", `data:${mime};charset=utf-8,${encodeURIComponent(content)}`);
+    }
     const get = (id) => {
       const el = doc.getElementById(id);
       if (!el) throw new Error(`Missing viewer element: ${id}`);
@@ -563,10 +827,10 @@ ${JSON.stringify(b.input ?? {}, null, 2)}`).join("\n");
     });
     get("demo-button").addEventListener("click", () => {
       get("agent-filter").value = "all";
-      renderReport(syntheticDemo(), doc);
+      renderReport(demoReport, doc);
     });
   }
-  var api = { validateReport, parseReport, inspectClaudeLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES };
+  var api = { validateReport, parseReport, inspectClaudeLog, inspectCodexLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES };
   if (root) {
     root.SessionAnalysis = api;
     if (root.document) {

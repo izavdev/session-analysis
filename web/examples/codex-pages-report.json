@@ -1,0 +1,206 @@
+{
+  "schema_version": "1.0.0",
+  "report": {
+    "id": "codex-pages-demo",
+    "generated_at": "2026-10-02T22:19:44.204Z",
+    "analyzer_version": "0.1.0",
+    "mode": "single_session",
+    "status": "partial",
+    "demo": true
+  },
+  "scope": {
+    "session_ids": [
+      "codex:pages-demo"
+    ],
+    "excluded_sessions": []
+  },
+  "coverage": {
+    "usage": "unavailable",
+    "limitations": [
+      "Sanitized excerpt of a real repo session (2026-10-02): eight selected events; personal paths and IDs replaced. Counts cover only this excerpt. Usage snapshots omitted.",
+      "Task outcomes are unknown; successful tool calls do not verify outcomes."
+    ]
+  },
+  "summary": {
+    "session_count": 1,
+    "tool_call_count": 2,
+    "finding_count": 1,
+    "input_tokens": null,
+    "output_tokens": null,
+    "total_tokens": null
+  },
+  "sessions": [
+    {
+      "id": "codex:pages-demo",
+      "agent": "codex",
+      "agent_version": "0.160.0",
+      "started_at": "2026-10-02T21:56:51.081Z",
+      "ended_at": "2026-10-02T22:02:13.146Z",
+      "parent_id": null,
+      "relationship": null,
+      "usage": {
+        "input_tokens": null,
+        "output_tokens": null,
+        "cache_read_tokens": null,
+        "cache_write_tokens": null,
+        "reasoning_tokens": null,
+        "total_tokens": null
+      },
+      "coverage": {
+        "usage": "unavailable",
+        "tools": "observed",
+        "limitations": [
+          "Sanitized excerpt of a real repo session (2026-10-02): eight selected events; personal paths and IDs replaced. Counts cover only this excerpt. Usage snapshots omitted."
+        ]
+      },
+      "metrics": {
+        "tool_call_count": 2,
+        "tool_error_count": 0,
+        "skill_load_count": 0,
+        "event_count": 8
+      },
+      "model_runs": [],
+      "timeline": [
+        {
+          "event_id": "codex:pages-demo:e1",
+          "type": "user",
+          "timestamp": "2026-10-02T21:59:57.992Z",
+          "tool_name": null,
+          "source_ref": "line:2"
+        },
+        {
+          "event_id": "codex:pages-demo:e2",
+          "type": "assistant",
+          "timestamp": "2026-10-02T22:00:01.717Z",
+          "tool_name": null,
+          "source_ref": "line:3"
+        },
+        {
+          "event_id": "codex:pages-demo:e3",
+          "type": "assistant",
+          "timestamp": "2026-10-02T22:00:49.868Z",
+          "tool_name": null,
+          "source_ref": "line:4"
+        },
+        {
+          "event_id": "codex:pages-demo:e4",
+          "type": "tool_call",
+          "timestamp": "2026-10-02T22:02:00.542Z",
+          "tool_name": "exec",
+          "source_ref": "line:5"
+        },
+        {
+          "event_id": "codex:pages-demo:e5",
+          "type": "tool_result",
+          "timestamp": "2026-10-02T22:02:01.732Z",
+          "tool_name": null,
+          "source_ref": "line:6"
+        },
+        {
+          "event_id": "codex:pages-demo:e6",
+          "type": "tool_call",
+          "timestamp": "2026-10-02T22:02:06.158Z",
+          "tool_name": "exec",
+          "source_ref": "line:7"
+        },
+        {
+          "event_id": "codex:pages-demo:e7",
+          "type": "tool_result",
+          "timestamp": "2026-10-02T22:02:06.252Z",
+          "tool_name": null,
+          "source_ref": "line:8"
+        },
+        {
+          "event_id": "codex:pages-demo:e8",
+          "type": "assistant",
+          "timestamp": "2026-10-02T22:02:13.146Z",
+          "tool_name": null,
+          "source_ref": "line:9"
+        }
+      ]
+    }
+  ],
+  "metrics": {
+    "tools": [
+      {
+        "name": "exec",
+        "calls": 2,
+        "errors": 0,
+        "output_chars": 11671
+      }
+    ],
+    "skills": []
+  },
+  "findings": [
+    {
+      "id": "demo-verification",
+      "category": "outcome_verification",
+      "rule_id": "demo_verification_review",
+      "title": "Check the recorded build verification",
+      "severity": "low",
+      "claim_type": "observed",
+      "confidence": "high",
+      "session_ids": [
+        "codex:pages-demo"
+      ],
+      "evidence_ids": [
+        "demo-start-call",
+        "demo-start-result",
+        "demo-call",
+        "demo-result"
+      ],
+      "observation": "The excerpt records a test/build invocation and a follow-up that collects its output.",
+      "interpretation": "Check evidence to compare the recorded commands and results with the closing claim. This excerpt does not establish that the site was deployed or identify an avoidable problem.",
+      "recommendation_ids": []
+    }
+  ],
+  "recommendations": [],
+  "skill_candidates": [],
+  "evidence": [
+    {
+      "id": "demo-start-result",
+      "session_id": "codex:pages-demo",
+      "event_id": "codex:pages-demo:e5",
+      "source_ref": "line:6",
+      "description": "Initial output; test process still running.",
+      "excerpt": null
+    },
+    {
+      "id": "demo-start-call",
+      "session_id": "codex:pages-demo",
+      "event_id": "codex:pages-demo:e4",
+      "source_ref": "line:5",
+      "description": "Recorded test/build invocation.",
+      "excerpt": null
+    },
+    {
+      "id": "demo-call",
+      "session_id": "codex:pages-demo",
+      "event_id": "codex:pages-demo:e6",
+      "source_ref": "line:7",
+      "description": "Follow-up tool input collecting test/build output.",
+      "excerpt": null
+    },
+    {
+      "id": "demo-result",
+      "session_id": "codex:pages-demo",
+      "event_id": "codex:pages-demo:e7",
+      "source_ref": "line:8",
+      "description": "Recorded tool output for that follow-up.",
+      "excerpt": null
+    }
+  ],
+  "analysis_usage": {
+    "mode": "assisted",
+    "model_tokens": null,
+    "notes": [
+      "Metrics computed locally from the sanitized excerpt. One editorial review observation added for the evidence demo; no actionable recommendations or savings estimates."
+    ]
+  },
+  "privacy": {
+    "raw_transcripts_included": false,
+    "excerpts_included": false,
+    "redaction_applied": true,
+    "safe_to_share": null
+  }
+}

@@ -19,6 +19,16 @@ npx --no-install session-analysis export report.json -o report.html
 
 Open `report.html` directly. Alternatively, open `web/index.html` and drop a generated JSON report. The website reads report files in the browser, not on a server.
 
+For a local preview using Node, run:
+
+```sh
+make dev
+```
+
+Open http://127.0.0.1:8000. This builds the viewer and serves `_site/`; refresh the
+browser to reload it. Stop with Ctrl+C. Use `make dev PORT=8080` to choose another
+port, and restart the command after changing source files.
+
 ## GitHub Pages
 
 The report viewer is entirely static: HTML, CSS, and browser JavaScript, with no backend or runtime Node requirement. Reports and source logs selected in the viewer stay in browser memory. Analysis still runs locally through the CLI.
@@ -28,11 +38,11 @@ npm ci
 npm run build:pages
 ```
 
-Publish the generated `_site/` directory to any static host. It contains only `index.html`, `setup.html`, `style.css`, `app.js`, and `.nojekyll`; the build recreates this directory to discard stale files. Reports, logs, fixtures, and CLI code are excluded. Relative asset and navigation URLs support both a repository path such as `/session-analysis/` and a custom domain, without rewrites or base-path configuration. The existing offline viewer and exported HTML continue to work.
+Publish the generated `_site/` directory to any static host. It contains `index.html`, `setup.html`, `style.css`, `app.js`, `.nojekyll`, and the two curated demo files under `examples/`; the build recreates this directory to discard stale files. Other reports, logs, fixtures, and CLI code are excluded. The bundled demo is a sanitized excerpt of the previous Codex session for this repo, with a downloadable report and session JSONL. Select **Try real session demo**, expand Evidence under **Worth reviewing**, and choose **Inspect source** to see its recorded call/result and nearby context immediately. See [demo provenance](web/examples/README.md). Relative asset and navigation URLs support both a repository path such as `/session-analysis/` and a custom domain, without rewrites or base-path configuration. The existing offline viewer and exported HTML continue to work.
 
 For GitHub Pages, select **Settings → Pages → Build and deployment → Source → GitHub Actions** ([GitHub setup documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)). The included `.github/workflows/pages.yml` tests and builds on pushes and pull requests, then publishes on default-branch pushes or a manual run on the default branch. Allow that branch in the `github-pages` environment's deployment rules. No GitHub settings are changed by the local build.
 
-For Claude Code tool or request evidence, expand an observation's Evidence list (ordinary reads are in the collapsed **Activity** section), click **Inspect source**, and choose the matching session `.jsonl` (up to 20 MiB). User/assistant text evidence can be viewed locally too; injected metadata is rejected. For tool evidence, the local inspector shows:
+For Claude Code or Codex rollout tool or request evidence, expand an observation's Evidence list (ordinary reads are in the collapsed **Activity** section), click **Inspect source**, and choose the matching session `.jsonl` (up to 20 MiB). User/assistant text evidence can be viewed locally too; injected metadata is rejected. For tool evidence, the local inspector shows:
 - A readable description for supported literal `cat`/`sed` reads or a native `Read` input; otherwise the original tool input, without guessing intent or running commands.
 - The nearest preceding non-metadata user request and assistant explanation, searched within 100 source lines.
 - The selected tool input and result, capped at 100,000 characters per source entry.
@@ -127,4 +137,4 @@ See [docs/verification.md](docs/verification.md) for the initial verification re
 
 ## Not in this release
 
-Automatic API-backed analysis, automatic skill installation, scheduled monitoring, causal before/after savings claims, full historical instruction snapshots, cloud-only session retrieval, persistent dismissal/learning, and automatic broad-read-to-search workflow judgments. Source-context drilldown currently supports Claude Code JSONL tool and user/assistant text evidence; other adapters retain timeline references. The three local-source adapters have separate coverage rather than pretending their telemetry is identical.
+Automatic API-backed analysis, automatic skill installation, scheduled monitoring, causal before/after savings claims, full historical instruction snapshots, cloud-only session retrieval, persistent dismissal/learning, and automatic broad-read-to-search workflow judgments. Source-context drilldown supports Claude Code JSONL and Codex rollout tool and user/assistant text evidence; other adapters retain timeline references. The three local-source adapters have separate coverage rather than pretending their telemetry is identical.

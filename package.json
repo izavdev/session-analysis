@@ -1,0 +1,33 @@
+{
+  "name": "agent-session-analysis",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Local-first Claude Code, Codex and Hermes session diagnostics",
+  "type": "module",
+  "engines": {
+    "node": ">=24.21.0"
+  },
+  "bin": {
+    "session-analysis": "./dist/cli.js"
+  },
+  "files": [
+    "dist/",
+    "web/index.html",
+    "web/app.js",
+    "web/style.css",
+    "web/setup.html",
+    "schemas/",
+    "skills/",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json && tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js",
+    "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.viewer.json --noEmit",
+    "test": "npm run build && node --test tests/*.test.mts"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.0",
+    "esbuild": "0.28.2",
+    "typescript": "7.0.2"
+  }
+}

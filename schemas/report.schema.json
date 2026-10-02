@@ -1,0 +1,893 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://session-analysis.local/schemas/report.schema.json",
+  "title": "Session Analysis report 1.0.0",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "report",
+    "scope",
+    "coverage",
+    "summary",
+    "sessions",
+    "metrics",
+    "findings",
+    "recommendations",
+    "skill_candidates",
+    "evidence",
+    "analysis_usage",
+    "privacy"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "report": {
+      "type": "object",
+      "required": [
+        "id",
+        "generated_at",
+        "analyzer_version",
+        "mode",
+        "status",
+        "demo"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "analyzer_version": {
+          "const": "0.1.0"
+        },
+        "mode": {
+          "enum": [
+            "single_session",
+            "multi_session"
+          ]
+        },
+        "status": {
+          "enum": [
+            "complete",
+            "partial"
+          ]
+        },
+        "demo": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "scope": {
+      "type": "object",
+      "required": [
+        "session_ids",
+        "excluded_sessions"
+      ],
+      "properties": {
+        "session_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excluded_sessions": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "reason"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "coverage": {
+      "type": "object",
+      "required": [
+        "limitations",
+        "usage"
+      ],
+      "properties": {
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "usage": {
+          "enum": [
+            "reported",
+            "partial",
+            "unavailable"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "session_count",
+        "tool_call_count",
+        "finding_count",
+        "input_tokens",
+        "output_tokens",
+        "total_tokens"
+      ],
+      "properties": {
+        "session_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "tool_call_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "finding_count": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "sessions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/session"
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "required": [
+        "tools",
+        "skills"
+      ],
+      "properties": {
+        "tools": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "calls",
+              "errors",
+              "output_chars"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "calls": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "errors": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "output_chars": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "skills": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "name",
+              "loads",
+              "states"
+            ],
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "loads": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "states": {
+                "type": "array",
+                "items": {
+                  "enum": [
+                    "invoked",
+                    "loaded",
+                    "applied",
+                    "unknown"
+                  ]
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "recommendations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/recommendation"
+      }
+    },
+    "skill_candidates": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/skill_candidate"
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      }
+    },
+    "analysis_usage": {
+      "type": "object",
+      "required": [
+        "mode",
+        "model_tokens",
+        "notes"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "metrics_only",
+            "assisted"
+          ]
+        },
+        "model_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "notes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "privacy": {
+      "type": "object",
+      "required": [
+        "raw_transcripts_included",
+        "excerpts_included",
+        "redaction_applied",
+        "safe_to_share"
+      ],
+      "properties": {
+        "raw_transcripts_included": {
+          "const": false
+        },
+        "excerpts_included": {
+          "type": "boolean"
+        },
+        "redaction_applied": {
+          "type": "boolean"
+        },
+        "safe_to_share": {
+          "type": "null"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "usage": {
+      "type": "object",
+      "required": [
+        "input_tokens",
+        "output_tokens",
+        "cache_read_tokens",
+        "cache_write_tokens",
+        "reasoning_tokens",
+        "total_tokens"
+      ],
+      "properties": {
+        "input_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "output_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cache_read_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "cache_write_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "reasoning_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "total_tokens": {
+          "anyOf": [
+            {
+              "type": "integer",
+              "minimum": 0
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "session_coverage": {
+      "type": "object",
+      "required": [
+        "usage",
+        "tools",
+        "limitations"
+      ],
+      "properties": {
+        "usage": {
+          "enum": [
+            "reported",
+            "partial",
+            "unavailable"
+          ]
+        },
+        "tools": {
+          "enum": [
+            "observed",
+            "unavailable"
+          ]
+        },
+        "limitations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "timeline_event": {
+      "type": "object",
+      "required": [
+        "event_id",
+        "type",
+        "timestamp",
+        "tool_name",
+        "source_ref"
+      ],
+      "properties": {
+        "event_id": {
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "user",
+            "assistant",
+            "tool_call",
+            "tool_result",
+            "skill",
+            "usage",
+            "compression"
+          ]
+        },
+        "timestamp": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "tool_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_ref": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "session": {
+      "type": "object",
+      "required": [
+        "id",
+        "agent",
+        "agent_version",
+        "started_at",
+        "ended_at",
+        "parent_id",
+        "relationship",
+        "usage",
+        "coverage",
+        "metrics",
+        "model_runs",
+        "timeline"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "agent": {
+          "enum": [
+            "codex",
+            "claude_code",
+            "hermes"
+          ]
+        },
+        "agent_version": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "started_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "ended_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "parent_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "relationship": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "usage": {
+          "$ref": "#/$defs/usage"
+        },
+        "coverage": {
+          "$ref": "#/$defs/session_coverage"
+        },
+        "metrics": {
+          "type": "object",
+          "required": [
+            "tool_call_count",
+            "tool_error_count",
+            "skill_load_count",
+            "event_count"
+          ],
+          "properties": {
+            "tool_call_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "tool_error_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "skill_load_count": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "event_count": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "additionalProperties": false
+        },
+        "model_runs": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "model",
+              "provider"
+            ],
+            "properties": {
+              "model": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "provider": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/timeline_event"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "finding": {
+      "type": "object",
+      "required": [
+        "id",
+        "category",
+        "rule_id",
+        "title",
+        "severity",
+        "claim_type",
+        "confidence",
+        "session_ids",
+        "evidence_ids",
+        "observation",
+        "interpretation",
+        "recommendation_ids"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "category": {
+          "enum": [
+            "token_usage",
+            "context_growth",
+            "tool_efficiency",
+            "skill_usage",
+            "workflow_efficiency",
+            "repeatable_tasks",
+            "outcome_verification",
+            "analysis_overhead"
+          ]
+        },
+        "rule_id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "claim_type": {
+          "enum": [
+            "observed",
+            "inferred"
+          ]
+        },
+        "confidence": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "session_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "observation": {
+          "type": "string"
+        },
+        "interpretation": {
+          "type": "string"
+        },
+        "recommendation_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recommendation": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "action",
+        "kind",
+        "priority",
+        "finding_ids",
+        "overlap_group"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "skill",
+            "script",
+            "template",
+            "instruction",
+            "workflow",
+            "investigate"
+          ]
+        },
+        "priority": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "finding_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "overlap_group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "skill_candidate": {
+      "type": "object",
+      "required": [
+        "id",
+        "title",
+        "trigger",
+        "session_ids",
+        "evidence_ids",
+        "recommendation",
+        "rationale",
+        "acceptance_tests"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "trigger": {
+          "type": "string"
+        },
+        "session_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "recommendation": {
+          "enum": [
+            "create",
+            "extend",
+            "merge",
+            "defer"
+          ]
+        },
+        "rationale": {
+          "type": "string"
+        },
+        "acceptance_tests": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "evidence": {
+      "type": "object",
+      "required": [
+        "id",
+        "session_id",
+        "event_id",
+        "source_ref",
+        "description",
+        "excerpt"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "event_id": {
+          "type": "string"
+        },
+        "source_ref": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "excerpt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

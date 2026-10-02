@@ -1,0 +1,63 @@
+{
+  "provenance": "sanitized-real SQLite projection; text, IDs, timestamps and arguments replaced; token counters retained",
+  "session": {
+    "input_tokens": 56,
+    "output_tokens": 7304,
+    "cache_read_tokens": 1326726,
+    "cache_write_tokens": 406227,
+    "reasoning_tokens": 0,
+    "api_call_count": 28,
+    "id": "fixture-hermes",
+    "started_at": 1767225600.0
+  },
+  "messages": [
+    {
+      "id": 1,
+      "session_id": "fixture-hermes",
+      "role": "user",
+      "content": "Sanitized fixture text.",
+      "timestamp": 1767225600.0
+    },
+    {
+      "id": 2,
+      "session_id": "fixture-hermes",
+      "role": "assistant",
+      "content": "Sanitized fixture text.",
+      "timestamp": 1767225601.0,
+      "tool_calls": "[{\"id\": \"call-1\", \"type\": \"function\", \"function\": {\"name\": \"terminal\", \"arguments\": \"{}\"}}]"
+    },
+    {
+      "id": 3,
+      "session_id": "fixture-hermes",
+      "role": "tool",
+      "content": "Sanitized fixture text.",
+      "timestamp": 1767225602.0,
+      "tool_call_id": "call-1",
+      "tool_name": "terminal"
+    },
+    {
+      "id": 4,
+      "session_id": "fixture-hermes",
+      "role": "assistant",
+      "content": "Sanitized fixture text.",
+      "timestamp": 1767225603.0,
+      "tool_calls": "[{\"id\": \"call-3\", \"type\": \"function\", \"function\": {\"name\": \"terminal\", \"arguments\": \"{}\"}}]"
+    },
+    {
+      "id": 5,
+      "session_id": "fixture-hermes",
+      "role": "tool",
+      "content": "Sanitized fixture text.",
+      "timestamp": 1767225604.0,
+      "tool_call_id": "call-3",
+      "tool_name": "terminal"
+    },
+    {
+      "id": 6,
+      "session_id": "fixture-hermes",
+      "role": "assistant",
+      "content": "Sanitized fixture text.",
+      "timestamp": 1767225605.0
+    }
+  ]
+}

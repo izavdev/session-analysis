@@ -1,0 +1,155 @@
+import {createHash} from 'node:crypto';
+import type {NormalizedEvent, NormalizedSession, Report, ReportSession, Finding, Recommendation, Evidence, SkillCandidate, Usage} from './types.js';
+import {validateReport} from './validation.js';
+
+function canonical(value:unknown):string {return JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v)??'null';}
+function digest(value:unknown):string {return createHash('sha256').update(canonical(value)).digest('hex').slice(0,20);}
+function sourceRef(e:NormalizedEvent):string {return /^(?:line|message|event|row):[A-Za-z0-9_.:-]{1,128}$/.test(e.source_ref)?e.source_ref:'event:'+digest(e.id);}
+function redact(text:string):string {return text.replace(/https?:\/\/\S+/g,'[URL]').replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[EMAIL]').replace(/(?<!\w)(?:\/[^\s/]+){2,}/g,'[PATH]').replace(/\b[A-Za-z]:\\(?:[^\\\s]+\\)+[^\\\s]+/g,'[PATH]').replace(/\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{12,}/g,'[TOKEN]');}
+function excerpt(text:string):string {return redact(text).slice(0,240);}
+const usageFields=(['input_tokens','output_tokens','cache_read_tokens','cache_write_tokens','reasoning_tokens','total_tokens'] as const);
+function isSessionControl(text:string):boolean {
+  // Match before task-text normalization removes slash/markup distinctions.
+  // Keep controls in the timeline, but do not treat session housekeeping as reusable work.
+  const value=text.trim();
+  return /^\/(?:clear|compact)(?:\s+[^\n]*)?$/i.test(value) ||
+    /^<command-name>\/(?:clear|compact)<\/command-name>\s*(?:<command-message>[^<]*<\/command-message>\s*)?(?:<command-args>[\s\S]*?<\/command-args>\s*)?$/i.test(value);
+}
+
+/** Deterministic local rules, with no transcript excerpts unless explicitly requested. */
+export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Report {
+  const excluded:Report['scope']['excluded_sessions']=[],seen=new Map<string,string>(), accepted:NormalizedSession[]=[];
+  for(const s of sessions) {const id=s.agent+':'+s.id,prior=seen.get(id);if(prior!==undefined) excluded.push({id,reason:prior===s.source.fingerprint?'duplicate':'conflicting_identity'});else {seen.set(id,s.source.fingerprint);accepted.push(s);}}
+  const resultSessions:ReportSession[]=accepted.map(s=>{
+    const id=s.agent+':'+s.id,runs:ReportSession['model_runs']=[];
+    for(const e of s.events) if(e.model) {const run={model:e.model,provider:e.provider??null};if(!runs.length||runs.at(-1)?.model!==run.model||runs.at(-1)?.provider!==run.provider) runs.push(run);}
+    return {id,agent:s.agent,agent_version:s.agent_version,started_at:s.started_at,ended_at:s.ended_at,parent_id:s.parent_id?s.agent+':'+s.parent_id:null,relationship:s.relationship,
+      usage:structuredClone(s.usage),coverage:{...structuredClone(s.coverage),limitations:s.coverage.limitations.map(redact)},
+      metrics:{tool_call_count:s.events.filter(e=>e.type==='tool_call').length,tool_error_count:0,skill_load_count:0,event_count:s.events.length},model_runs:runs,
+      timeline:s.events.map(e=>({event_id:id+':'+e.id,type:e.type,timestamp:e.timestamp,tool_name:e.tool_name??null,source_ref:sourceRef(e)}))};
+  });
+  const totals=Object.fromEntries(usageFields.map(k=>[k,resultSessions.some(s=>s.usage[k]!==null)?resultSessions.reduce((n,s)=>n+(s.usage[k]??0),0):null])) as unknown as Usage;
+  const usage=usageFields.every(k=>totals[k]===null)?'unavailable':resultSessions.every(s=>s.coverage.usage==='reported'&&s.usage.total_tokens!==null)?'reported':'partial';
+  const report:Report={schema_version:'1.0.0',report:{id:'report:'+digest(sessions),generated_at:new Date().toISOString(),analyzer_version:'0.1.0',mode:resultSessions.length===1?'single_session':'multi_session',status:usage==='reported'&&!excluded.length&&accepted.every(s=>s.coverage.limitations.length===0)?'complete':'partial',demo:false},
+    scope:{session_ids:resultSessions.map(s=>s.id),excluded_sessions:excluded},coverage:{usage,limitations:['Task outcomes are unknown; successful tool calls do not verify outcomes.']},
+    summary:{session_count:resultSessions.length,tool_call_count:resultSessions.reduce((n,s)=>n+s.metrics.tool_call_count,0),finding_count:0,input_tokens:totals.input_tokens,output_tokens:totals.output_tokens,total_tokens:totals.total_tokens},
+    sessions:resultSessions,metrics:{tools:[],skills:[]},findings:[],recommendations:[],skill_candidates:[],evidence:[],
+    analysis_usage:{mode:'metrics_only',model_tokens:null,notes:['No model calls or monetary savings estimates.']},privacy:{raw_transcripts_included:false,excerpts_included:includeExcerpts,redaction_applied:includeExcerpts,safe_to_share:null}};
+  const tools=new Map<string,Report['metrics']['tools'][number]>(),skills=new Map<string,Report['metrics']['skills'][number]>(),evidenceIds=new Set<string>();
+  function evidence(sid:string,e:NormalizedEvent,description:string):string {const id='evidence:'+digest([sid,e.id]);if(!evidenceIds.has(id)){evidenceIds.add(id);report.evidence.push({id,session_id:sid,event_id:sid+':'+e.id,source_ref:sourceRef(e),description,excerpt:includeExcerpts&&e.text?excerpt(e.text):null});}return id;}
+  function finding(rule:string,category:Finding['category'],sid:string,events:NormalizedEvent[],observation:string,interpretation:string):void {
+    const id='finding:'+digest([rule,sid,events.map(e=>e.id)]);
+    report.findings.push({id,category,rule_id:rule,title:rule.replaceAll('_',' ').replace(/^./,c=>c.toUpperCase()),severity:'low',claim_type:'observed',confidence:'high',session_ids:[sid],evidence_ids:events.map(e=>evidence(sid,e,observation)),observation,interpretation,recommendation_ids:[]});
+  }
+  for(const [i,s] of accepted.entries()) {const target=resultSessions[i]!,sid=target.id;
+    for(const limitation of target.coverage.limitations) {const note=sid+': '+limitation;if(!report.coverage.limitations.includes(note)) report.coverage.limitations.push(note);}
+    if(s.coverage.tools==='unavailable') report.report.status='partial';
+    const calls=new Map<string,NormalizedEvent[]>(), groups=new Map<string,NormalizedEvent[]>(),skillGroups=new Map<string,NormalizedEvent[]>();
+    for(const e of s.events) {
+      if(e.type==='skill') {const name=e.skill_name||'unknown',state=e.skill_state||'unknown';let item=skills.get(name);if(!item){item={name,loads:0,states:[]};skills.set(name,item);}if(!item.states.includes(state)) item.states.push(state);
+        if(state==='loaded'){item.loads++;target.metrics.skill_load_count++;const group=skillGroups.get(name)??[];group.push(e);skillGroups.set(name,group);}}
+      if(e.type==='tool_call') {const name=e.tool_name||'unknown';let item=tools.get(name);if(!item){item={name,calls:0,errors:0,output_chars:0};tools.set(name,item);}item.calls++;
+        if(e.call_id){const group=calls.get(e.call_id)??[];group.push(e);calls.set(e.call_id,group);}
+        const key=canonical([name,digest(e.arguments??null)]),group=groups.get(key)??[];group.push(e);groups.set(key,group);}
+    }
+    const failed=new Set<string>(),linkedResults=new Map<string,NormalizedEvent[]>();
+    for(const e of s.events) {if(e.type!=='tool_result') continue;
+      const matches=calls.get(e.call_id??'')??[];
+      if(matches.length!==1){report.coverage.limitations.push('Unmatched or ambiguous tool result in '+sid+'; not attributed to a call.');report.report.status='partial';continue;}
+      const call=matches[0]!,name=call.tool_name||'unknown',size=e.text.length;tools.get(name)!.output_chars+=size;
+      const results=linkedResults.get(call.id)??[];results.push(e);linkedResults.set(call.id,results);
+      if(e.is_error===true&&!failed.has(call.id)){failed.add(call.id);tools.get(name)!.errors++;}
+      if(size>=10000) finding('large_tool_output','context_growth',sid,[call,e],`This tool result contains ${size} characters. Its token and cost impact were not measured separately.`,
+        'Large output may be necessary; context and billing impact are unknown.');
+    }
+    target.metrics.tool_error_count=failed.size;
+    const covered=new Set<string>();
+    const callKey=(e:NormalizedEvent)=>canonical([e.tool_name,e.arguments??null]);
+    let pending:NormalizedEvent|null=null,episode:NormalizedEvent[]=[],episodeKey='',errorText='';
+    function finish(recovery:NormalizedEvent[]=[]):void {
+      if(episode.length>=4||(episode.length===2&&recovery.length)) {
+        const events=[...episode,...recovery];
+        for(const e of events) if(e.type==='tool_call') covered.add(e.id);
+        finding(episode.length>=4?'repeated_failed_attempt':'failed_tool_call','tool_efficiency',sid,events,
+          episode.length>=4?`${episode.length/2} contiguous calls share an exact tool name, canonical arguments and identical nonempty explicit error result text.`:'One linked tool call has an explicit error result, followed by an exact same-call retry with an explicit non-error result.',
+          recovery.length?'Later explicit non-error result observed; task outcome remains unknown.':'No later explicit non-error result observed; task outcome remains unknown.');
+      }
+      episode=[];episodeKey='';errorText='';
+    }
+    // Only sequential, uniquely linked call/result pairs qualify. Concurrent or
+    // ambiguous results do not establish a retry episode or unchanged state.
+    for(const e of s.events) {
+      if(e.type==='assistant'||e.type==='usage') continue;
+      if(e.type==='tool_call') {
+        if(pending||callKey(e)!==episodeKey) finish();
+        pending=e;continue;
+      }
+      if(e.type!=='tool_result') {finish();pending=null;continue;}
+      const call=pending;pending=null;
+      if(!call||!call.tool_name||calls.get(e.call_id??'')?.[0]!==call||calls.get(e.call_id??'')?.length!==1||linkedResults.get(call.id)?.length!==1) {finish();continue;}
+      if(e.is_error===true) {
+        if(episode.length&&(e.text!==errorText||!e.text.trim().length)) finish();
+        episodeKey=callKey(call);errorText=e.text;episode.push(call,e);
+      } else finish(e.is_error===false?[call,e]:[]);
+    }
+    finish();
+    for(const call of s.events) if(call.type==='tool_call'&&failed.has(call.id)&&!covered.has(call.id)) {
+      const result=linkedResults.get(call.id)!.find(e=>e.is_error===true)!;
+      finding('failed_tool_call','tool_efficiency',sid,[call,result],'One linked tool call has an explicit error result.','An error does not establish task failure or avoidable work.');
+    }
+    for(const all of groups.values()) {const group=all.filter(e=>!covered.has(e.id));if(group.length>=2) finding('repeated_tool_call','tool_efficiency',sid,group,`${group.length} calls share a tool name and argument hash.`,
+      'Repeated calls are not proved unnecessary; state may have changed.');}
+    for(const group of skillGroups.values()) if(group.length>=2) finding('repeated_skill_load','skill_usage',sid,group,`${group.length} loads of the same skill observed.`,
+      'Repeated loads may be appropriate; no avoidable work is established.');
+  }
+  report.metrics.skills=[...skills.values()].sort((a,b)=>a.name.localeCompare(b.name));for(const s of report.metrics.skills)s.states.sort();
+  report.metrics.tools=[...tools.values()].sort((a,b)=>a.name.localeCompare(b.name));
+  const requests=new Map<string,Array<[string,NormalizedEvent]>>();
+  for(const [i,s] of accepted.entries()) for(const e of s.events) if(e.type==='user') {
+    if(isSessionControl(e.text))continue;
+    const normalized=e.text.toLowerCase().split(/\s+/).join(' ').replace(/[^\p{L}\p{N}_\s]/gu,'').trim();
+    if(normalized){const hash=digest(normalized),group=requests.get(hash)??[];group.push([resultSessions[i]!.id,e]);requests.set(hash,group);}
+  }
+  for(const [hash,occurrences] of requests) {const sids=[...new Set(occurrences.map(([sid])=>sid))];if(sids.length<2) continue;
+    const evids=occurrences.map(([sid,e])=>evidence(sid,e,'Normalized user request recurs across sessions; content omitted.'));
+    const id='finding:'+digest(['recurring_user_request',hash]);
+    report.findings.push({id,category:'repeatable_tasks',rule_id:'recurring_user_request',title:'Recurring request candidate',severity:'low',claim_type:'inferred',confidence:'low',session_ids:sids,evidence_ids:evids,observation:'Matching normalized user requests observed in multiple sessions.',interpretation:'Potential repeatable workflow; usefulness and outcome are not verified.',recommendation_ids:[]});
+    report.skill_candidates.push({id:'candidate:'+hash,title:'Recurring request candidate',trigger:'Repeated normalized request (hash '+hash+')',session_ids:sids,evidence_ids:evids,recommendation:'defer',rationale:'Candidate only; repeated wording does not prove reusable skill value.',acceptance_tests:['Confirm intent and usefulness manually before creating a skill.']});
+  }
+  report.summary.finding_count=report.findings.length;
+  return report;
+}
+
+export interface EvidencePacket {schema_version:'1.0.0';truncated:boolean;findings:Array<Pick<Finding,'id'|'rule_id'|'session_ids'|'evidence_ids'|'observation'>>;evidence:Evidence[];}
+/** Minimal packet with strict JSON serialized length limit and no dangling findings. */
+export function evidencePacket(report:Report,maxChars=12000):EvidencePacket {
+  if(!Number.isSafeInteger(maxChars)||maxChars<80) throw new Error('max_chars must be at least 80');
+  const packet:EvidencePacket={schema_version:report.schema_version,truncated:false,findings:[],evidence:[]};
+  const fits=()=>JSON.stringify(packet).length<=maxChars;
+  for(const e of report.evidence){packet.evidence.push({id:e.id,session_id:e.session_id,event_id:e.event_id,source_ref:e.source_ref,description:e.description,excerpt:e.excerpt});if(!fits()){packet.evidence.pop();packet.truncated=true;}}
+  const available=new Set(packet.evidence.map(e=>e.id));
+  for(const f of report.findings){if(f.evidence_ids.some(id=>!available.has(id))){packet.truncated=true;continue;}
+    packet.findings.push({id:f.id,rule_id:f.rule_id,session_ids:f.session_ids,evidence_ids:f.evidence_ids,observation:f.observation});if(!fits()){packet.findings.pop();packet.truncated=true;}}
+  return packet;
+}
+
+/** Append only manually inferred claims tied to existing evidence; validate the complete merged report. */
+export function mergeInterpretation(report:Report,interpretation:unknown):Report {
+  validateReport(report);
+  if(interpretation===null||typeof interpretation!=='object'||Array.isArray(interpretation)||Object.keys(interpretation).some(k=>!['findings','recommendations','skill_candidates'].includes(k))) throw new Error('Only supplemental findings, recommendations and skill_candidates are allowed');
+  const input=interpretation as Record<string,unknown>,result=structuredClone(report);
+  const additions={} as {findings:Finding[];recommendations:Recommendation[];skill_candidates:SkillCandidate[]};
+  for(const kind of ['findings','recommendations','skill_candidates'] as const){const entries=input[kind]??[];if(!Array.isArray(entries)) throw new Error(kind+' must be a list');
+    const ids=new Set((report[kind] as Array<{id:string}>).map(x=>x.id));for(const item of entries){if(!item||typeof item!=='object'||Array.isArray(item)||typeof item.id!=='string'||ids.has(item.id)) throw new Error('Invalid or duplicate '+kind+' ID');ids.add(item.id);}
+    if(kind==='findings') additions.findings=entries as Finding[];
+    else if(kind==='recommendations') additions.recommendations=entries as Recommendation[];
+    else additions.skill_candidates=entries as SkillCandidate[];}
+  const evids=new Map(report.evidence.map(e=>[e.id,e.session_id])),sids=new Set(report.scope.session_ids),recIds=new Set([...report.recommendations,...additions.recommendations].map(x=>x.id)),findIds=new Set([...report.findings,...additions.findings].map(x=>x.id));
+  const refs=(v:unknown,known:Set<string>)=>Array.isArray(v)&&v.every(x=>typeof x==='string'&&known.has(x));
+  for(const f of additions.findings){if(f.claim_type!=='inferred'||!Array.isArray(f.evidence_ids)||!f.evidence_ids.length||!Array.isArray(f.session_ids)||!f.session_ids.length||!refs(f.evidence_ids,new Set(evids.keys()))||!refs(f.session_ids,sids)||!refs(f.recommendation_ids,recIds)||f.evidence_ids.some(id=>!f.session_ids.includes(evids.get(id)!))) throw new Error('Supplemental findings must be inferred and evidenced');}
+  for(const rec of additions.recommendations) if(!Array.isArray(rec.finding_ids)||!rec.finding_ids.length||!refs(rec.finding_ids,findIds)) throw new Error('Recommendation references unknown findings');
+  for(const c of additions.skill_candidates) if(!Array.isArray(c.evidence_ids)||!c.evidence_ids.length||!Array.isArray(c.session_ids)||!c.session_ids.length||!refs(c.evidence_ids,new Set(evids.keys()))||!refs(c.session_ids,sids)||c.evidence_ids.some(id=>!c.session_ids.includes(evids.get(id)!))) throw new Error('Candidate references unknown evidence or sessions');
+  result.findings.push(...structuredClone(additions.findings));result.recommendations.push(...structuredClone(additions.recommendations));result.skill_candidates.push(...structuredClone(additions.skill_candidates));
+  result.summary.finding_count=result.findings.length;result.analysis_usage.mode='assisted';result.analysis_usage.notes.push('Manual interpretation added; inferred claims are not measured savings.');
+  validateReport(result);return result;
+}

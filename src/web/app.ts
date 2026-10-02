@@ -1,0 +1,576 @@
+/* Session Analysis — offline, read-only report viewer. */
+// Viewer compiles as a standalone browser module; its type declarations mirror the shared report contract.
+type AgentName = 'claude_code' | 'codex' | 'hermes';
+type UsageCoverage = 'reported' | 'partial' | 'unavailable';
+type EventType = 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'skill' | 'usage' | 'compression';
+
+interface Usage {
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  reasoning_tokens: number | null;
+  total_tokens: number | null;
+}
+
+interface NormalizedEvent {
+  id: string;
+  type: EventType;
+  timestamp: string | null;
+  text: string;
+  source_ref: string;
+  tool_name?: string;
+  call_id?: string;
+  arguments?: unknown;
+  is_error?: boolean | null;
+  skill_name?: string;
+  skill_state?: 'invoked' | 'loaded' | 'applied' | 'unknown';
+  model?: string | null;
+  provider?: string | null;
+  usage?: Usage;
+}
+
+interface NormalizedSession {
+  id: string;
+  agent: AgentName;
+  agent_version: string | null;
+  source: {format: string; fingerprint: string};
+  started_at: string | null;
+  ended_at: string | null;
+  parent_id: string | null;
+  relationship: string | null;
+  events: NormalizedEvent[];
+  usage: Usage;
+  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]};
+}
+
+interface ReportSession {
+  id: string;
+  agent: AgentName;
+  agent_version: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  parent_id: string | null;
+  relationship: string | null;
+  usage: Usage;
+  coverage: NormalizedSession['coverage'];
+  metrics: {tool_call_count: number; tool_error_count: number; skill_load_count: number; event_count: number};
+  model_runs: Array<{model: string | null; provider: string | null}>;
+  timeline: Array<{event_id: string; type: EventType; timestamp: string | null; tool_name: string | null; source_ref: string}>;
+}
+
+interface Finding {
+  id: string;
+  category: 'token_usage' | 'context_growth' | 'tool_efficiency' | 'skill_usage' | 'workflow_efficiency' | 'repeatable_tasks' | 'outcome_verification' | 'analysis_overhead';
+  rule_id: string;
+  title: string;
+  severity: 'low' | 'medium' | 'high';
+  claim_type: 'observed' | 'inferred';
+  confidence: 'low' | 'medium' | 'high';
+  session_ids: string[];
+  evidence_ids: string[];
+  observation: string;
+  interpretation: string;
+  recommendation_ids: string[];
+}
+interface Recommendation {
+  id: string;
+  title: string;
+  action: string;
+  kind: 'skill' | 'script' | 'template' | 'instruction' | 'workflow' | 'investigate';
+  priority: 'low' | 'medium' | 'high';
+  finding_ids: string[];
+  overlap_group: string | null;
+}
+interface SkillCandidate {
+  id: string;
+  title: string;
+  trigger: string;
+  session_ids: string[];
+  evidence_ids: string[];
+  recommendation: 'create' | 'extend' | 'merge' | 'defer';
+  rationale: string;
+  acceptance_tests: string[];
+}
+interface Evidence {
+  id: string;
+  session_id: string;
+  event_id: string;
+  source_ref: string;
+  description: string;
+  excerpt: string | null;
+}
+
+interface Report {
+  schema_version: '1.0.0';
+  report: {id: string; generated_at: string; analyzer_version: '0.1.0'; mode: 'single_session' | 'multi_session'; status: 'complete' | 'partial'; demo: boolean};
+  scope: {session_ids: string[]; excluded_sessions: Array<{id: string; reason: string}>};
+  coverage: {usage: UsageCoverage; limitations: string[]};
+  summary: {session_count: number; tool_call_count: number; finding_count: number; input_tokens: number | null; output_tokens: number | null; total_tokens: number | null};
+  sessions: ReportSession[];
+  metrics: {tools: Array<{name: string; calls: number; errors: number; output_chars: number}>; skills: Array<{name: string; loads: number; states: string[]}>};
+  findings: Finding[];
+  recommendations: Recommendation[];
+  skill_candidates: SkillCandidate[];
+  evidence: Evidence[];
+  analysis_usage: {mode: 'metrics_only' | 'assisted'; model_tokens: number | null; notes: string[]};
+  privacy: {raw_transcripts_included: false; excerpts_included: boolean; redaction_applied: boolean; safe_to_share: null};
+}
+type Obj = Record<string, any>;
+type Check = (value: any) => boolean;
+const root: Window | undefined = typeof window === 'undefined' ? undefined : window;
+  const object = (v: any): v is Obj => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const string = (v: any): v is string => typeof v === 'string';
+  const count = (v: any) => Number.isSafeInteger(v) && v >= 0;
+  const nullableString = (v: any) => v === null || string(v);
+  const token = (v: any) => v === null || count(v);
+  const list = (check: Check): Check => (v: any) => Array.isArray(v) && v.every(check);
+  const oneOf = (values: string[]): Check => (v: any) => values.includes(v);
+  const usage = {input_tokens:token,output_tokens:token,cache_read_tokens:token,cache_write_tokens:token,reasoning_tokens:token,total_tokens:token};
+  export function validateReport(value: unknown): string[] {
+    const errors: string[] = [];
+    function shape(v: any, fields: Record<string, Check>, at: string) {
+      if (!object(v)) { errors.push(at + ' must be an object.'); return; }
+      for (const [key, check] of Object.entries(fields)) if (!check(v[key])) errors.push(at + '.' + key + ' is missing or invalid.');
+    }
+    function rows(v: any, fields: Record<string, Check>, at: string) {
+      if (Array.isArray(v)) v.forEach((item,i) => shape(item, fields, at + '[' + i + ']'));
+    }
+    const strings = list(string), array: Check = Array.isArray;
+    shape(value, {schema_version:v=>v==='1.0.0',report:object,scope:object,coverage:object,summary:object,sessions:array,metrics:object,findings:array,recommendations:array,skill_candidates:array,evidence:array,analysis_usage:object,privacy:object}, 'Report');
+    if (!object(value)) return errors;
+    shape(value.report,{id:string,generated_at:v=>string(v)&&Number.isFinite(Date.parse(v)),analyzer_version:string,mode:oneOf(['single_session','multi_session']),status:oneOf(['complete','partial']),demo:v=>typeof v==='boolean'},'report');
+    shape(value.scope,{session_ids:strings,excluded_sessions:list(object)},'scope');
+    const coverage={usage:oneOf(['reported','partial','unavailable']),limitations:strings};
+    shape(value.coverage,coverage,'coverage');
+    shape(value.summary,{session_count:count,tool_call_count:count,finding_count:count,input_tokens:token,output_tokens:token,total_tokens:token},'summary');
+    shape(value.metrics,{tools:array,skills:array},'metrics');
+    if (object(value.metrics)) {
+      rows(value.metrics.tools,{name:string,calls:count,errors:count,output_chars:count},'metrics.tools');
+      rows(value.metrics.skills,{name:string,loads:count,states:strings},'metrics.skills');
+    }
+    rows(value.sessions,{id:string,agent:oneOf(['claude_code','codex','hermes']),agent_version:nullableString,started_at:nullableString,ended_at:nullableString,parent_id:nullableString,relationship:nullableString,usage:object,coverage:object,metrics:object,model_runs:array,timeline:array},'sessions');
+    if (Array.isArray(value.sessions)) value.sessions.forEach((s: unknown, i: number)=> {
+      if (!object(s)) return;
+      shape(s.usage,usage,'sessions['+i+'].usage');
+      shape(s.coverage,{...coverage,tools:oneOf(['observed','unavailable'])},'sessions['+i+'].coverage');
+      shape(s.metrics,{tool_call_count:count,tool_error_count:count,skill_load_count:count,event_count:count},'sessions['+i+'].metrics');
+      rows(s.model_runs,{model:nullableString,provider:nullableString},'model_runs');
+      rows(s.timeline,{event_id:string,type:string,timestamp:nullableString,tool_name:nullableString,source_ref:string},'timeline');
+    });
+    rows(value.findings,{id:string,category:string,rule_id:string,title:string,severity:oneOf(['low','medium','high']),claim_type:oneOf(['observed','inferred']),confidence:oneOf(['low','medium','high']),session_ids:strings,evidence_ids:strings,observation:string,interpretation:string,recommendation_ids:strings},'findings');
+    rows(value.recommendations,{id:string,title:string,action:string,kind:oneOf(['skill','script','template','instruction','workflow','investigate']),priority:oneOf(['low','medium','high']),finding_ids:strings,overlap_group:nullableString},'recommendations');
+    rows(value.skill_candidates,{id:string,title:string,trigger:string,session_ids:strings,evidence_ids:strings,recommendation:oneOf(['create','extend','merge','defer']),rationale:string,acceptance_tests:strings},'skill_candidates');
+    rows(value.evidence,{id:string,session_id:string,event_id:string,source_ref:string,description:string,excerpt:nullableString},'evidence');
+    shape(value.analysis_usage,{mode:oneOf(['metrics_only','assisted']),model_tokens:token,notes:strings},'analysis_usage');
+    shape(value.privacy,{raw_transcripts_included:v=>v===false,excerpts_included:v=>typeof v==='boolean',redaction_applied:v=>typeof v==='boolean',safe_to_share:v=>v===null},'privacy');
+    return errors;
+  }
+  export const MAX_FILE_BYTES = 20 * 1024 * 1024;
+  type ClaudeSourceTarget = {source_ref: string; type: 'tool_call' | 'tool_result' | 'user' | 'assistant'};
+  const sourceTypes=new Set(['tool_call','tool_result','user','assistant']);
+  type ClaudeSourceEntry = {line: number; title: string; content: string; truncated: boolean};
+  function describeToolInput(name: unknown, input: unknown): string {
+    if (!object(input)) return '';
+    if (name==='Read' && string(input.file_path)) {
+      const offset=count(input.offset)&&input.offset>0?input.offset:1;
+      return count(input.limit)&&input.limit>0?`Read up to ${input.limit} lines starting at line ${offset}: ${input.file_path}`:
+        input.offset===undefined?`Read file (tool may limit output): ${input.file_path}`:`Read from line ${offset}: ${input.file_path}`;
+    }
+    if (name!=='Bash' || !string(input.command)) return '';
+    // Deliberately not a shell parser. Only recognize literal cat/sed reads; never evaluate logged commands.
+    const path='(?:[A-Za-z0-9_./-]+|"[A-Za-z0-9_./ -]+"|\'[A-Za-z0-9_./ -]+\')';
+    const segments=input.command.trim().split(/\s*&&\s*/);
+    const descriptions=segments.map((segment:string)=>{
+      const literalPath=(value:string)=>value.replace(/^["']|["']$/g,'');
+      let match=new RegExp(`^cat\\s+(${path})$`).exec(segment);
+      if(match) return literalPath(match[1]!).startsWith('-')?null:`Read whole file: ${literalPath(match[1]!)}`;
+      match=new RegExp(`^sed\\s+-n\\s+(['"]?)(\\d+),(\\d+)p\\1\\s+(${path})$`).exec(segment);
+      if(match && Number(match[2])>0 && Number(match[3])>=Number(match[2]) && !literalPath(match[4]!).startsWith('-')) return `Read lines ${match[2]}–${match[3]}: ${literalPath(match[4]!)}`;
+      return null;
+    });
+    return descriptions.every(Boolean)?descriptions.join('\n'):'';
+  }
+  /** Resolve report line references only after the reader explicitly selects a local Claude JSONL. */
+  export function inspectClaudeLog(text: string, sessionId: string, targets: ClaudeSourceTarget[], size?: number): ClaudeSourceEntry[] {
+    if ((size !== undefined && size > MAX_FILE_BYTES) || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error('Source log exceeds the 20 MiB import limit.');
+    if (!sessionId.startsWith('claude_code:') || !targets.length) throw new Error('Select Claude Code tool evidence first.');
+    const rows=text.split('\n');
+    const seenCalls=new Set<string>();
+    const seenResults=new Set<string>();
+    if(targets.length>40) throw new Error('Select at most 40 source events at a time.');
+    const entries=targets.map(target=>{
+      const match=/^line:([1-9]\d*)$/.exec(target.source_ref);
+      if (!match || !sourceTypes.has(target.type)) throw new Error('Invalid source reference.');
+      const line=Number(match[1]);
+      if (!Number.isSafeInteger(line) || !rows[line-1]) throw new Error(`Source line ${line} is missing from the selected file.`);
+      let record: unknown;
+      try { record=JSON.parse(rows[line-1]!); } catch { throw new Error(`Source line ${line} is not valid JSON.`); }
+      if (!object(record) || record.sessionId !== sessionId.slice('claude_code:'.length)) throw new Error(`Source line ${line} belongs to a different session.`);
+      if(target.type==='user'||target.type==='assistant') {
+        if(record.isMeta===true)throw new Error('Injected metadata is not a user request.');
+        const body=textOf(record);
+        if(record.type!==target.type || !body) throw new Error(`Source line ${line} does not contain the expected ${target.type} text.`);
+        return {line,title:`line ${line} · ${target.type==='user'?'user request':'assistant context'}`,content:body.slice(0,4000),truncated:body.length>4000};
+      }
+      const role=target.type==='tool_call'?'assistant':'user';
+      const blockType=target.type==='tool_call'?'tool_use':'tool_result';
+      const blocks=object(record.message) && Array.isArray(record.message.content) ? record.message.content.filter((b: unknown)=>object(b) && b.type===blockType) as Obj[] : [];
+      if (record.type !== role || !blocks.length) throw new Error(`Source line ${line} does not contain the expected ${target.type}.`);
+      const parts=blocks.map(block=>{
+        if (target.type==='tool_call') {
+          if (string(block.id)) seenCalls.add(block.id);
+          const description=describeToolInput(block.name,block.input);
+          const command=object(block.input)&&string(block.input.command)?`Command (not executed):\n${block.input.command}\n\n`:'';
+          return `${description?description+'\n\n':''}${string(block.name)?block.name:'Unnamed tool'} · input\n${command}${JSON.stringify(block.input ?? {},null,2)}`;
+        }
+        if (string(block.tool_use_id)) seenResults.add(block.tool_use_id);
+        const value=block.content;
+        const output=string(value)?value:Array.isArray(value)?value.map(part=>object(part) && part.type==='text' && string(part.text)?part.text:'[Non-text content omitted]').join('\n'):JSON.stringify(value ?? '');
+        return `Tool result${block.is_error===true?' · error':''}\n${output}`;
+      }).join('\n\n');
+      const limit=100_000;
+      return {line,title:`line ${line} · ${target.type==='tool_call'?'tool call':'tool result'}`,content:parts.slice(0,limit),truncated:parts.length>limit};
+    });
+    if (seenCalls.size && seenResults.size && [...seenResults].some(id=>!seenCalls.has(id))) throw new Error('The selected tool result does not match the selected call.');
+    const first=Math.min(...entries.map(e=>e.line)),last=Math.max(...entries.map(e=>e.line));
+    function recordAt(line:number):Obj|null {
+      try {const row:unknown=JSON.parse(rows[line-1]??'');return object(row)?row:null;} catch {return null;}
+    }
+    function textOf(record:Obj):string {
+      if(!object(record.message)) return '';
+      const content=record.message.content;
+      return string(content)?content:Array.isArray(content)?content.filter(b=>object(b)&&b.type==='text'&&string(b.text)).map(b=>b.text).join('\n'):'';
+    }
+    function bounded(line:number,title:string,content:string):ClaudeSourceEntry {return {line,title,content:content.slice(0,4000),truncated:content.length>4000};}
+    const context:ClaudeSourceEntry[]=[];
+    let request:ClaudeSourceEntry|undefined,explanation:ClaudeSourceEntry|undefined;
+    for(let line=first;line>=Math.max(1,first-100);line--) {
+      const row=recordAt(line);if(!row)continue;
+      if(string(row.sessionId)&&row.sessionId!==sessionId.slice('claude_code:'.length))break;
+      if(row.sessionId!==sessionId.slice('claude_code:'.length)||row.isMeta===true)continue;
+      const body=textOf(row);
+      if(row.type==='assistant' && body && !explanation) explanation=bounded(line,`line ${line} · Preceding assistant context`,body);
+      if(row.type==='user' && body) {request=bounded(line,`line ${line} · Preceding user request`,body);break;}
+    }
+    if(request) {
+      if(!targets.some(target=>target.type==='user'&&target.source_ref===`line:${request.line}`))context.push(request);
+    } else context.push(bounded(first,'Context limitation','Preceding user request not found in the bounded context window (up to 100 source lines).'));
+    if(explanation)context.push(explanation);
+    let next:ClaudeSourceEntry|undefined;
+    for(let line=last+1;line<=Math.min(rows.length,last+20);line++) {
+      const row=recordAt(line);if(!row)continue;
+      if(string(row.sessionId)&&row.sessionId!==sessionId.slice('claude_code:'.length))break;
+      if(row.sessionId!==sessionId.slice('claude_code:'.length)||row.isMeta===true)continue;
+      if(row.type==='user' && textOf(row))break;
+      if(row.type!=='assistant' || !object(row.message))continue;
+      const blocks=Array.isArray(row.message.content)?row.message.content:[];
+      const tools=blocks.filter(b=>object(b)&&b.type==='tool_use').map(b=>`${b.name || 'Unnamed tool'} · input\n${JSON.stringify(b.input??{},null,2)}`).join('\n');
+      const body=[textOf(row),tools].filter(Boolean).join('\n');
+      if(body) {next=bounded(line,`line ${line} · Next recorded action (not a verified outcome)`,body);break;}
+    }
+    return [...context,...entries,...(next?[next]:[bounded(last,'Context limitation','Next action not found within 20 source lines, or a new user request/session boundary intervened.')])];
+  }
+  export function parseReport(text: string, size?: number): Report {
+    if ((size !== undefined && size > MAX_FILE_BYTES) || new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error('Report exceeds the 20 MiB import limit.');
+    let value: unknown;
+    try { value = JSON.parse(text); } catch (_) { throw new Error('Invalid JSON. Choose an exported Session Analysis report.'); }
+    const errors = validateReport(value);
+    if (errors.length) throw new Error(errors.slice(0,8).join('\n'));
+    return value as Report;
+  }
+  export function selectScope(report: Report, agent: string) {
+    const sessions = report.sessions.filter(s => agent === 'all' || s.agent === agent);
+    const ids = new Set(sessions.map(s => s.id));
+    const included = (item: {session_ids: string[]}) => agent === 'all' || item.session_ids.some(id => ids.has(id));
+    return {sessions, findings:report.findings.filter(included), candidates:report.skill_candidates.filter(included)};
+  }
+  export function formatNumber(value: number | null | undefined): string { return value === null || value === undefined ? 'Unavailable' : Number(value).toLocaleString('en-US'); }
+  const activityRules=new Set(['large_tool_output','repeated_skill_load','failed_tool_call']);
+  const reviewOnlyRules=new Set([...activityRules,'repeated_tool_call','repeated_failed_attempt','recurring_user_request','synthetic-example']);
+  const reportGenerations=new WeakMap<Document,number>();
+  export function renderReport(report: Report, doc: Document | undefined = root?.document): Report {
+    const errors = validateReport(report);
+    if (errors.length) throw new Error(errors.slice(0,8).join('\n'));
+    if (!doc) return report;
+    const generation=(reportGenerations.get(doc)??0)+1;
+    reportGenerations.set(doc,generation);
+    const byId = (id: string): HTMLElement => { const el = doc.getElementById(id); if (!el) throw new Error(`Missing viewer element: ${id}`); return el; };
+    const node = (tag: string, text?: string | number, className?: string): HTMLElement => {
+      const el = doc.createElement(tag);
+      if (text !== undefined) el.textContent = String(text);
+      if (className) el.className = className;
+      return el;
+    };
+    const line = (parent: HTMLElement, tag: string, text?: string | number, className?: string): HTMLElement => { const el=node(tag,text,className); parent.append(el); return el; };
+    const clear = (id: string, text?: string) => { const el=byId(id); el.replaceChildren(); if (text) el.textContent=text; return el; };
+    const placeholder = (el: HTMLElement, text: string) => { if (!el.children.length) line(el,'p',text,'empty'); };
+    byId('report-view').hidden=false;
+    byId('empty-state').hidden=true;
+    byId('import-error').hidden=true;
+    byId('report-label').textContent=`Report ${report.report.id} · ${report.report.generated_at} · ${report.report.status}`;
+    byId('demo-label').hidden=!report.report.demo;
+    byId('privacy-banner').textContent=`Privacy: Raw transcripts ${report.privacy.raw_transcripts_included?'included':'not included'}; excerpts ${report.privacy.excerpts_included?'included':'not included'}; redaction ${report.privacy.redaction_applied?'applied':'not applied'}. This report is not safe to share automatically; inspect it before sharing.`;
+    const limitationCounts=new Map<string,number>();
+    report.coverage.limitations.forEach(item=>limitationCounts.set(item,(limitationCounts.get(item)??0)+1));
+    byId('coverage-banner').textContent=`Coverage: ${report.coverage.usage} usage · ${report.report.status} report · ${limitationCounts.size} limitation type(s) (${report.coverage.limitations.length} occurrences)`;
+    const coverage=clear('coverage-details');
+    for(const [item,count] of limitationCounts) line(coverage,'li',count===1?item:`${item} · ${count} occurrences`);
+    if (!report.coverage.limitations.length) line(coverage,'li','No limitations reported. This does not verify outcomes.');
+    const summary=clear('summary');
+    for (const [title,value] of [['Sessions',report.summary.session_count],['Tool calls',report.summary.tool_call_count],['Observations',report.summary.finding_count],['Input tokens',report.summary.input_tokens],['Output tokens',report.summary.output_tokens],['Total tokens',report.summary.total_tokens]] as Array<[string, number | null]>) {
+      const card=line(summary,'div',undefined,'summary-card');
+      line(card,'span',title,'eyebrow'); line(card,'strong',formatNumber(value));
+    }
+    const sourcePanel=byId('source-inspector');
+    const sourceFile=byId('source-file') as HTMLInputElement;
+    let sourceSelection: {sessionId: string; targets: ClaudeSourceTarget[]} | null=null;
+    let sourceRead=0;
+    sourcePanel.hidden=true;
+    sourceFile.value='';
+    clear('source-view');clear('source-status');
+    const inspectFile=async (file?: File) => {
+      if (!file || !sourceSelection) return;
+      const selection=sourceSelection,read=++sourceRead;
+      const active=()=>!sourcePanel.hidden && sourceSelection===selection && read===sourceRead && reportGenerations.get(doc)===generation;
+      clear('source-view');
+      try {
+        if (file.size > MAX_FILE_BYTES) throw new Error('Source log exceeds the 20 MiB import limit.');
+        const text=await file.text();
+        if(!active())return;
+        const entries=inspectClaudeLog(text,selection.sessionId,selection.targets,file.size);
+        byId('source-status').textContent=`Showing ${file.name || 'selected file'} locally · ${selection.sessionId}. Nothing was uploaded.`;
+        const view=byId('source-view');
+        for(const entry of entries) {
+          line(view,'h4',entry.title);
+          line(view,'pre',entry.content,'source-content');
+          if(entry.truncated) line(view,'p','Preview truncated (tool entries: 100,000 characters; surrounding context: 4,000). Inspect the original JSONL for the remainder.','muted');
+        }
+      } catch (cause) {
+        if(!active())return;
+        sourceFile.value='';
+        byId('source-status').textContent=cause instanceof Error?cause.message:'Unable to read selected source log.';
+      }
+    };
+    sourceFile.onchange=event=>{void inspectFile((event.target as HTMLInputElement).files?.[0]);};
+    byId('source-close').onclick=()=>{sourcePanel.hidden=true;sourceSelection=null;sourceFile.value='';clear('source-view');};
+    let selected: string | null=null;
+    function paintInspector(session?: ReportSession) {
+      const box=clear('inspector');
+      if (!session) {line(box,'p','Select a session to inspect its timeline.','empty');return;}
+      line(box,'h3',session.id);
+      line(box,'p',`${session.agent} · ${session.agent_version || 'Version unavailable'}`,'muted');
+      line(box,'p',`${session.started_at || 'Start unavailable'} → ${session.ended_at || 'End unavailable'}`);
+      line(box,'p',`Parent: ${session.parent_id || 'None reported'} · Relationship: ${session.relationship || 'Unavailable'}`);
+      line(box,'p',`Usage: ${session.coverage.usage}; tools: ${session.coverage.tools}; input ${formatNumber(session.usage.input_tokens)}, output ${formatNumber(session.usage.output_tokens)}, total ${formatNumber(session.usage.total_tokens)}`);
+      line(box,'p',`Cache read ${formatNumber(session.usage.cache_read_tokens)} · cache write ${formatNumber(session.usage.cache_write_tokens)} · reasoning ${formatNumber(session.usage.reasoning_tokens)}`);
+      line(box,'p',`Calls ${session.metrics.tool_call_count} · errors ${session.metrics.tool_error_count} · skill loads ${session.metrics.skill_load_count} · events ${session.metrics.event_count}`);
+      session.coverage.limitations.forEach(item=>line(box,'p',`Limitation: ${item}`,'muted'));
+      line(box,'h4','Models observed');
+      const models=new Set(session.model_runs.filter(run=>run.model).map(run=>`${run.provider || 'Provider unavailable'} / ${run.model}`));
+      models.forEach(model=>line(box,'p',model));
+      if (!models.size) line(box,'p','Model not reported.','muted');
+      line(box,'h4','Timeline');
+      const timeline=line(box,'ol',undefined,'timeline');
+      session.timeline.forEach(event=>line(timeline,'li',`${event.timestamp || 'Time unavailable'} · ${event.type}${event.tool_name ? ' · '+event.tool_name : ''} · ${event.event_id} · ${event.source_ref}`));
+      placeholder(timeline,'No timeline events reported.');
+    }
+    function paintScope() {
+      const filtered=selectScope(report,(byId('agent-filter') as HTMLSelectElement).value);
+      byId('session-count').textContent=`(${filtered.sessions.length})`;
+      const body=clear('sessions-body');
+      filtered.sessions.forEach(session=> {
+        const tr=node('tr'); body.append(tr);
+        const first=line(tr,'td');
+        const button=line(first,'button',`${session.id} · ${session.agent}`,'session-link');
+        button.setAttribute('type','button'); button.addEventListener('click',()=>{selected=session.id;paintInspector(session);});
+        line(tr,'td',session.coverage.usage);
+        line(tr,'td',formatNumber(session.usage.total_tokens),'numeric');
+        line(tr,'td',formatNumber(session.metrics.tool_call_count),'numeric');
+        line(tr,'td',formatNumber(session.metrics.tool_error_count),'numeric');
+      });
+      byId('no-sessions').hidden=filtered.sessions.length!==0;
+      paintInspector(filtered.sessions.find(session=>session.id===selected));
+      const findingGroups=new Map<string,Finding[]>();
+      filtered.findings.forEach(finding=>{
+        const key=JSON.stringify([finding.rule_id,finding.category,finding.title,finding.severity,finding.claim_type,finding.confidence,finding.interpretation]);
+        const group=findingGroups.get(key)??[];group.push(finding);findingGroups.set(key,group);
+      });
+      const reviewGroups=[...findingGroups.values()].filter(group=>!activityRules.has(group[0]!.rule_id));
+      const activityGroups=[...findingGroups.values()].filter(group=>activityRules.has(group[0]!.rule_id));
+      const groupCount=(groups:Finding[][])=>{const total=groups.reduce((n,group)=>n+group.length,0);return `(${groups.length} ${groups.length===1?'type':'types'} · ${total} ${total===1?'observation':'observations'})`;};
+      byId('finding-count').textContent=groupCount(reviewGroups);
+      byId('activity-count').textContent=groupCount(activityGroups);
+      const evidence=new Map(report.evidence.map(item=>[item.id,item]));
+      const sessions=new Map(report.sessions.map(session=>[session.id,session]));
+      const findings=clear('findings');
+      const activity=clear('activity');
+      function paintFinding(parent:HTMLElement,finding:Finding) {
+        line(parent,'p',finding.observation);
+        const details=line(parent,'details');line(details,'summary',`Evidence (${finding.evidence_ids.length})`);
+        finding.evidence_ids.forEach(id=>{
+          const e=evidence.get(id);
+          line(details,'p',e ? `${e.session_id} · ${e.event_id} · ${e.source_ref}: ${e.description}` : `Evidence ${id} unavailable`);
+          if (e && e.excerpt !== null) line(details,'pre',e.excerpt,'excerpt');
+          const session=e && sessions.get(e.session_id);
+          const event=session?.timeline.find(item=>item.event_id===e?.event_id && item.source_ref===e?.source_ref);
+          if (e && session?.agent==='claude_code' && /^line:[1-9]\d*$/.test(e.source_ref) && event && sourceTypes.has(event.type)) {
+            const button=line(details,'button','Inspect source','source-link');
+            button.setAttribute('type','button');
+            button.addEventListener('click',()=>{
+              const related=finding.evidence_ids.length<=40?finding.evidence_ids.map(item=>evidence.get(item)).filter(item=>item?.session_id===e.session_id):[e];
+              const targets=related.flatMap(item=>{
+                const hit=session.timeline.find(row=>row.event_id===item?.event_id && row.source_ref===item?.source_ref);
+                return item && hit && sourceTypes.has(hit.type)?[{source_ref:item.source_ref,type:hit.type as ClaudeSourceTarget['type']}]:[];
+              });
+              sourceSelection={sessionId:e.session_id,targets};
+              sourcePanel.hidden=false;
+              clear('source-view');
+              byId('source-status').textContent=`Choose the Claude Code JSONL for ${e.session_id} to inspect ${targets.map(item=>item.source_ref).join(' and ')}. The report does not contain the raw log.`;
+              sourcePanel.scrollIntoView?.({block:'start'});
+              void inspectFile(sourceFile.files?.[0]);
+            });
+          }
+        });
+      }
+      [...findingGroups.values()].sort((a,b)=>b.length-a.length).forEach(group=>{
+        const finding=group[0]!;
+        const ordinary=activityRules.has(finding.rule_id);
+        const card=line(ordinary?activity:findings,'article',undefined,'card');
+        line(card,'h3',`${finding.title} · ${group.length} ${group.length===1?'occurrence':'occurrences'}`);
+        line(card,'p',ordinary?'Activity only — not an improvement recommendation.':'Review candidate — usefulness requires context.','muted');
+        line(card,'p',finding.interpretation);
+        const reviewActions=report.recommendations.filter(rec=>rec.kind==='investigate' && rec.finding_ids.some(id=>group.some(item=>item.id===id)));
+        if(!ordinary) [...new Set(reviewActions.map(rec=>rec.action))].forEach(action=>line(card,'p',`Review question: ${action}`));
+        if(group.length===1) paintFinding(card,finding);
+        else {
+          const details=line(card,'details');line(details,'summary',`Inspect ${group.length} observations and evidence`);
+          group.forEach(item=>{
+            const occurrence=line(details,'div',undefined,'occurrence');
+            line(occurrence,'p',item.session_ids.join(', '),'muted');
+            paintFinding(occurrence,item);
+          });
+        }
+      });
+      placeholder(findings,'No review candidates identified for this scope.');
+      placeholder(activity,'No size or standalone error observations for this scope. The session timeline contains all observed events.');
+      const recommendationIds=new Set(filtered.findings.map(f=>f.id));
+      const recs=clear('recommendations');
+      const recommendationGroups=new Map<string,Recommendation[]>();
+      report.recommendations.filter(rec=>rec.kind!=='investigate' && rec.finding_ids.some(id=>{
+        const finding=filtered.findings.find(item=>item.id===id);
+        return finding && !reviewOnlyRules.has(finding.rule_id) && finding.evidence_ids.length>0;
+      }) && ((byId('agent-filter') as HTMLSelectElement).value==='all' || rec.finding_ids.some(id=>recommendationIds.has(id)))).forEach(rec=>{
+        const key=rec.overlap_group===null?rec.id:JSON.stringify([rec.overlap_group,rec.title,rec.action,rec.kind,rec.priority]);
+        const group=recommendationGroups.get(key)??[];group.push(rec);recommendationGroups.set(key,group);
+      });
+      [...recommendationGroups.values()].sort((a,b)=>b.length-a.length).forEach(group=>{
+        const rec=group[0]!;
+        const card=line(recs,'article',undefined,'card'); line(card,'h3',rec.title);
+        line(card,'p',`${rec.kind} · ${rec.priority} priority · ${group.length} ${group.length===1?'occurrence':'occurrences'}`,'muted');
+        line(card,'p',rec.action);
+        const linked=filtered.findings.filter(item=>group.some(rec=>rec.finding_ids.includes(item.id)));
+        const support=line(card,'details');line(support,'summary','Why this is suggested · evidence');
+        linked.forEach(finding=>paintFinding(support,finding));
+        if(group.length>1){
+          const details=line(card,'details');line(details,'summary',`Linked findings (${group.length})`);
+          group.forEach(item=>line(details,'p',`${item.id} · ${item.finding_ids.join(', ')}`));
+        }
+      });
+      byId('suggestion-count').textContent=`(${recommendationGroups.size})`;
+      placeholder(recs,'No actionable improvements identified. Activity and review candidates below are not proof of wasted work.');
+      const candidates=clear('candidates');
+      filtered.candidates.forEach(candidate=>{
+        const card=line(candidates,'article',undefined,'card'); line(card,'h3',candidate.title);
+        line(card,'p',`Proposed: ${candidate.recommendation} · ${candidate.trigger}`,'muted');
+        line(card,'p',candidate.rationale);
+        line(card,'p',`Evidence: ${candidate.evidence_ids.join(', ') || 'None reported'}`);
+        const tests=line(card,'ul');candidate.acceptance_tests.forEach(item=>line(tests,'li',item));
+      });
+      placeholder(candidates,'No skill candidates for this agent.');
+    }
+    function table<T>(id: string, columns: string[], data: T[], values: (item: T) => string[]) {
+      const holder=clear(id);
+      if (!data.length) {placeholder(holder,'No observations reported.');return;}
+      const t=line(holder,'table'),thead=line(t,'thead'),head=line(thead,'tr');
+      columns.forEach(col=>line(head,'th',col));
+      const tbody=line(t,'tbody');
+      data.forEach(row=>{const tr=line(tbody,'tr');values(row).forEach(val=>line(tr,'td',val));});
+    }
+    table('tools',['Tool','Calls','Errors','Output characters'],report.metrics.tools,t=>[t.name,formatNumber(t.calls),formatNumber(t.errors),formatNumber(t.output_chars)]);
+    table('skills',['Skill','Loads','States'],report.metrics.skills,s=>[s.name,formatNumber(s.loads),s.states.join(', ') || 'Unknown']);
+    const notes=clear('analysis-notes');
+    line(notes,'p',`Analysis: ${report.analysis_usage.mode} · model tokens: ${formatNumber(report.analysis_usage.model_tokens)}`);
+    report.analysis_usage.notes.forEach(note=>line(notes,'p',note));
+    byId('agent-filter').addEventListener('change',paintScope);
+    paintScope();
+    return report;
+  }
+  function syntheticDemo(): Report {
+    const id='hermes:synthetic-example';
+    return {
+      schema_version:'1.0.0',
+      report:{id:'synthetic-demo',generated_at:'2026-01-01T00:00:00Z',analyzer_version:'0.1.0',mode:'single_session',status:'partial',demo:true},
+      scope:{session_ids:[id],excluded_sessions:[]},
+      coverage:{usage:'partial',limitations:['Synthetic illustrative data; not derived from real sessions.','Outcome verification unavailable.']},
+      summary:{session_count:1,tool_call_count:2,finding_count:1,input_tokens:120,output_tokens:null,total_tokens:null},
+      sessions:[{id,agent:'hermes',agent_version:null,started_at:null,ended_at:null,parent_id:null,relationship:null,
+        usage:{input_tokens:120,output_tokens:null,cache_read_tokens:null,cache_write_tokens:null,reasoning_tokens:null,total_tokens:null},
+        coverage:{usage:'partial',tools:'observed',limitations:['Synthetic usage is incomplete.']},
+        metrics:{tool_call_count:2,tool_error_count:0,skill_load_count:1,event_count:2},model_runs:[],
+        timeline:[{event_id:'example-1',type:'tool_call',timestamp:null,tool_name:'example_tool',source_ref:'synthetic:1'},
+          {event_id:'example-2',type:'skill',timestamp:null,tool_name:null,source_ref:'synthetic:2'}]}],
+      metrics:{tools:[{name:'example_tool',calls:2,errors:0,output_chars:48}],skills:[{name:'example-skill',loads:1,states:['loaded']}]},
+      findings:[{id:'example-finding',category:'tool_efficiency',rule_id:'synthetic-example',title:'Repeated tool invocation (illustrative)',severity:'low',claim_type:'observed',confidence:'low',session_ids:[id],evidence_ids:['example-evidence'],observation:'Two example calls were observed.',interpretation:'Repetition does not prove wasted work.',recommendation_ids:['example-recommendation']}],
+      recommendations:[{id:'example-recommendation',title:'Inspect repetition',action:'Review source context before changing the workflow.',kind:'investigate',priority:'low',finding_ids:['example-finding'],overlap_group:null}],
+      skill_candidates:[{id:'example-candidate',title:'Example workflow candidate',trigger:'Recurring similar task',session_ids:[id],evidence_ids:['example-evidence'],recommendation:'defer',rationale:'A synthetic example cannot establish a real recurring workflow.',acceptance_tests:['Confirm with real evidence.']}],
+      evidence:[{id:'example-evidence',session_id:id,event_id:'example-1',source_ref:'synthetic:1',description:'Illustrative tool call.',excerpt:null}],
+      analysis_usage:{mode:'metrics_only',model_tokens:null,notes:['Synthetic example only.']},
+      privacy:{raw_transcripts_included:false,excerpts_included:false,redaction_applied:false,safe_to_share:null}
+    };
+  }
+  export function bootstrap(doc: Document | undefined = root?.document): void {
+    if (!doc) return;
+    const get = (id: string): HTMLElement => { const el = doc.getElementById(id); if (!el) throw new Error(`Missing viewer element: ${id}`); return el; };
+    const error = (message: string) => { get('import-error').textContent=message;get('import-error').hidden=false; };
+    const load = (text: string) => { try { renderReport(parseReport(text),doc); } catch (cause) { error(cause instanceof Error ? cause.message : 'Unable to open report.'); } };
+    const embedded=get('embedded-report');
+    if (embedded && embedded.textContent.trim()) load(embedded.textContent);
+    get('clear-button').addEventListener('click',()=>{
+      get('report-view').hidden=true;get('empty-state').hidden=false;
+      get('import-error').hidden=true;get('import-error').textContent='';
+      (get('agent-filter') as HTMLSelectElement).value='all';(get('report-file') as HTMLInputElement).value='';
+      (get('source-file') as HTMLInputElement).value='';get('source-view').replaceChildren();get('source-inspector').hidden=true;
+    });
+    const readFile=async (file?: File)=>{
+      if (!file) return;
+      try {
+        if (file.size > MAX_FILE_BYTES) throw new Error('Report exceeds the 20 MiB import limit.');
+        const text=await file.text();
+        renderReport(parseReport(text,file.size),doc);
+        (get('agent-filter') as HTMLSelectElement).value='all';get('agent-filter').dispatchEvent(new Event('change'));
+      } catch (cause) { error(cause instanceof Error ? cause.message : 'Unable to open report.'); }
+    };
+    get('report-file').addEventListener('change',event=>{void readFile((event.target as HTMLInputElement).files?.[0]);});
+    const zone=get('drop-zone');
+    zone.addEventListener('dragover',event=>{event.preventDefault();zone.classList.add('dragover');});
+    zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
+    zone.addEventListener('drop',event=>{
+      event.preventDefault();zone.classList.remove('dragover');
+      void readFile((event as DragEvent).dataTransfer?.files?.[0]);
+    });
+    get('demo-button').addEventListener('click',()=>{
+      (get('agent-filter') as HTMLSelectElement).value='all';
+      renderReport(syntheticDemo(),doc);
+    });
+  }
+  const api = {validateReport, parseReport, inspectClaudeLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES};
+  
+  if (root) {
+    (root as Window & {SessionAnalysis?: typeof api}).SessionAnalysis = api;
+    if (root.document) {
+      if (root.document.readyState === 'loading') root.document.addEventListener('DOMContentLoaded',()=>bootstrap(root.document));
+      else bootstrap(root.document);
+    }
+  }
+

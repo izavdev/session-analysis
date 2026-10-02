@@ -21,6 +21,8 @@
     "README.md"
   ],
   "scripts": {
+    "build:viewer": "tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js",
+    "build:pages": "npm run build:viewer && node scripts/build-pages.mjs",
     "build": "tsc -p tsconfig.json && tsc -p tsconfig.viewer.json && esbuild src/web/app.ts --bundle --format=iife --platform=browser --target=es2022 --outfile=web/app.js",
     "check": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.viewer.json --noEmit",
     "test": "npm run build && node --test tests/*.test.mts"

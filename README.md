@@ -17,7 +17,20 @@ npx --no-install session-analysis validate report.json
 npx --no-install session-analysis export report.json -o report.html
 ```
 
-Open `report.html` directly. Alternatively, open `web/index.html` and drop a generated JSON report. The same web directory is a static site suitable for static hosting; this repository does not publish anything automatically. The website reads report files in the browser, not on a server.
+Open `report.html` directly. Alternatively, open `web/index.html` and drop a generated JSON report. The website reads report files in the browser, not on a server.
+
+## GitHub Pages
+
+The report viewer is entirely static: HTML, CSS, and browser JavaScript, with no backend or runtime Node requirement. Reports and source logs selected in the viewer stay in browser memory. Analysis still runs locally through the CLI.
+
+```sh
+npm ci
+npm run build:pages
+```
+
+Publish the generated `_site/` directory to any static host. It contains only `index.html`, `setup.html`, `style.css`, `app.js`, and `.nojekyll`; the build recreates this directory to discard stale files. Reports, logs, fixtures, and CLI code are excluded. Relative asset and navigation URLs support both a repository path such as `/session-analysis/` and a custom domain, without rewrites or base-path configuration. The existing offline viewer and exported HTML continue to work.
+
+For GitHub Pages, select **Settings → Pages → Build and deployment → Source → GitHub Actions** ([GitHub setup documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)). The included `.github/workflows/pages.yml` tests and builds on pushes and pull requests, then publishes on default-branch pushes or a manual run on the default branch. Allow that branch in the `github-pages` environment's deployment rules. No GitHub settings are changed by the local build.
 
 For Claude Code tool or request evidence, expand an observation's Evidence list (ordinary reads are in the collapsed **Activity** section), click **Inspect source**, and choose the matching session `.jsonl` (up to 20 MiB). User/assistant text evidence can be viewed locally too; injected metadata is rejected. For tool evidence, the local inspector shows:
 - A readable description for supported literal `cat`/`sed` reads or a native `Read` input; otherwise the original tool input, without guessing intent or running commands.

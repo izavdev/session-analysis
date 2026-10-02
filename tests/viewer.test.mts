@@ -3,10 +3,43 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
-import { validateReport, parseReport, selectScope, formatNumber, renderReport, bootstrap, inspectClaudeLog, MAX_FILE_BYTES } from '../src/web/app.ts';
+import { validateReport, parseReport, selectScope, formatNumber, renderReport, bootstrap, inspectClaudeLog, inspectCodexLog, MAX_FILE_BYTES } from '../src/web/app.ts';
 import type { Report } from '../src/types.ts';
 
 const html = readFileSync(fileURLToPath(new URL('../web/index.html', import.meta.url)), 'utf8');
+const demoLog = readFileSync(new URL('../web/examples/codex-pages-session.jsonl', import.meta.url), 'utf8');
+const demoReport = parseReport(readFileSync(new URL('../web/examples/codex-pages-report.json', import.meta.url), 'utf8'));
+
+test('real demo opens bundled evidence and downloads match its report references',async()=>{
+  const doc=documentFixture();bootstrap(doc as unknown as Document);
+  doc.elements['demo-button'].dispatch('click');
+  assert.match(doc.elements['demo-label'].textContent,/REAL SESSION.*SANITIZED/);
+  assert.match(doc.elements.findings.textContent,/Check the recorded build verification/);
+  assert.match(doc.elements.recommendations.textContent,/No actionable improvements identified/);
+  doc.elements.findings.querySelectorAll('button')[0]!.dispatch('click');
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.match(doc.elements['source-view'].textContent,/npm test/);
+  assert.match(doc.elements['source-view'].textContent,/tests 63/);
+  assert.match(doc.elements['source-view'].textContent,/GitHub Pages compatible/);
+  assert.match(doc.elements['source-view'].textContent,/not a verified outcome/);
+  const entries=inspectCodexLog(demoLog,demoReport.sessions[0]!.id,[{source_ref:'line:7',type:'tool_call'},{source_ref:'line:8',type:'tool_result'}]);
+  assert.ok(entries.some(entry=>entry.line===8 && entry.content.includes('tests 63')));
+  assert.doesNotMatch(demoLog,/\/Users\/admin|encrypted_content|internal_chat_message|rate_limits/);
+  assert.equal(demoReport.summary.tool_call_count,2);
+  assert.equal(demoReport.summary.total_tokens,null);
+});
+
+test('Codex inspection rejects identity, event type and call/result mismatches',()=>{
+  const targets=[{source_ref:'line:7',type:'tool_call' as const},{source_ref:'line:8',type:'tool_result' as const}];
+  assert.throws(()=>inspectCodexLog(demoLog,'codex:other',targets),/different session/);
+  assert.throws(()=>inspectCodexLog(demoLog,'codex:pages-demo',[{source_ref:'line:2',type:'tool_call'}]),/expected tool_call/);
+  assert.throws(()=>inspectCodexLog(demoLog,'codex:pages-demo',targets,MAX_FILE_BYTES+1),/20 MiB/);
+  const rows=demoLog.trim().split('\n').map(row=>JSON.parse(row));
+  rows[7].payload.call_id='unrelated';
+  assert.throws(()=>inspectCodexLog(rows.map(row=>JSON.stringify(row)).join('\n'),'codex:pages-demo',targets),/does not match/);
+  rows[1].payload.content[0].text='<environment_context>Injected metadata</environment_context>';
+  assert.throws(()=>inspectCodexLog(rows.map(row=>JSON.stringify(row)).join('\n'),'codex:pages-demo',[{source_ref:'line:2',type:'user'}]),/injected metadata/);
+});
 function report(): Report {
   return {schema_version:'1.0.0', report:{id:'synthetic',generated_at:'2026-01-01T00:00:00Z',analyzer_version:'0.1.0',mode:'single_session',status:'partial',demo:false}, scope:{session_ids:[],excluded_sessions:[]},coverage:{limitations:['Synthetic fixture'],usage:'unavailable'},summary:{session_count:0,tool_call_count:0,finding_count:0,input_tokens:null,output_tokens:null,total_tokens:null},sessions:[],metrics:{tools:[],skills:[]},findings:[],recommendations:[],skill_candidates:[],evidence:[],analysis_usage:{mode:'metrics_only',model_tokens:null,notes:[]},privacy:{raw_transcripts_included:false,excerpts_included:false,redaction_applied:false,safe_to_share:null}};
 }
@@ -248,11 +281,11 @@ test('drop import enforces size before reading and reports invalid JSON',async()
   await new Promise(resolve=>setImmediate(resolve));
   assert.equal(doc.elements['import-error'].hidden,true);
 });
-test('demo is labeled synthetic and resets filter',()=>{
+test('demo is labeled as a sanitized real session and resets filter',()=>{
   const doc=documentFixture(); bootstrap(doc as unknown as Document); doc.elements['agent-filter'].value='codex'; doc.elements['demo-button'].dispatch('click');
   assert.equal(doc.elements['demo-label'].hidden,false);
   assert.equal(doc.elements['agent-filter'].value,'all');
-  assert.match(doc.elements['report-label'].textContent,/synthetic/i);
+  assert.match(doc.elements['demo-label'].textContent,/REAL SESSION.*SANITIZED/);
 });
 test('browser module attaches API and initializes once DOM is ready',async()=>{
   const doc=documentFixture();

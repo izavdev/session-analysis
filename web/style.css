@@ -18,3 +18,22 @@
 .copy-path{color:var(--accent);font:12px var(--mono);overflow-wrap:anywhere;text-align:left;min-height:32px;padding:5px 9px;max-width:100%;user-select:text}.copy-feedback{margin-left:8px;font-size:11px}.platform-choice{display:flex;align-items:center;gap:12px;margin:12px 0}#session-path-guide p{margin:8px 0}
 
 .copy-feedback{opacity:0;transition:opacity 250ms ease-out}.copy-feedback.visible{opacity:1}@media(prefers-reduced-motion:reduce){.copy-feedback{transition:none}}
+
+/* Recommendation feedback: labeled fields with room for written reviews. */
+.card details.feedback-panel{padding:18px 20px;margin-top:18px}
+.feedback-panel>summary{font-weight:600}
+.card .feedback-status{margin:12px 0 20px;white-space:pre-wrap}
+.feedback-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;border:0;border-top:1px solid var(--line);padding:18px 0 22px;margin:0;min-width:0}
+.feedback-grid legend{padding:0 10px 0 0;font-size:12px;font-weight:600;color:var(--ink)}
+.feedback-field{display:flex;flex-direction:column;gap:7px;min-width:0;font-size:12px;color:var(--muted)}
+.feedback-field>span{line-height:1.4}
+.feedback-field textarea,.feedback-field select{display:block;width:100%;min-width:0;min-height:42px;margin:0;border:1px solid var(--line);border-radius:5px;background:var(--raised);color:var(--ink);font:13px/1.5 var(--sans);padding:10px 12px}
+.feedback-field textarea{resize:vertical;max-width:100%}
+.feedback-field textarea:focus-visible,.feedback-field select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.feedback-wide{grid-column:1/-1}
+.card details.feedback-followup{margin:0 0 20px;padding:14px 16px;background:transparent}
+.feedback-followup .feedback-grid{margin-top:16px;padding-bottom:0}
+.feedback-actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.feedback-actions>span{font-size:11px;max-width:360px}
+@media(max-width:1050px){.feedback-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:650px){.card details.feedback-panel{padding:16px 12px}.feedback-grid{grid-template-columns:minmax(0,1fr);gap:14px}.feedback-actions{align-items:stretch;flex-direction:column}.feedback-actions>button{width:100%}.card details.feedback-followup{padding:12px}}

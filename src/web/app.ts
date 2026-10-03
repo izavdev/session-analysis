@@ -446,15 +446,19 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       placeholder(timeline,'No timeline events reported.');
     }
     function feedbackForm(parent:HTMLElement,rec:Recommendation) {
-      const panel=line(parent,'details');line(panel,'summary','Record local feedback');
-      const status=line(panel,'p',undefined,'muted');
+      const panel=line(parent,'details',undefined,'feedback-panel');line(panel,'summary','Record local feedback');
+      const status=line(panel,'p',undefined,'muted feedback-status');status.setAttribute('role','status');
       const show=()=>{const entries=feedbackMap!.get(feedbackKey)?.entries.filter(e=>e.recommendation_id===rec.id)??[];status.textContent=entries.length?entries.map(e=>`${e.reviewer}: ${e.review.decision}; usefulness ${e.review.usefulness??'unknown'}; ${e.attempt.state}; follow-up ${e.follow_up?.outcome??'missing'} — ${e.review.reason}`).join('\n'):'Unreviewed. Acceptance, implementation and improvement are separate.';};show();
-      const input=(title:string,value='')=>{const label=line(panel,'label',title);const field=line(label,'textarea') as HTMLTextAreaElement;field.value=value;return field;};
-      const select=(title:string,options:string[])=>{const label=line(panel,'label',title);const field=line(label,'select') as HTMLSelectElement;options.forEach(value=>{const option=line(field,'option',value) as HTMLOptionElement;option.value=value;});field.value=options[0]!;return field;};
-      const reviewer=input('Reviewer (anonymous allowed)','anonymous'),decision=select('Decision',['defer','accept','reject']),sufficient=select('Evidence sufficient',['unknown','yes','no']),correct=select('Factually correct',['unknown','yes','no']),rating=select('Usefulness',['unknown','1','2','3','4','5']),reason=input('Reason');
-      const attempted=select('Intervention attempt',['not_attempted','attempted','unknown']),change=input('What changed'),test=input('Correctness test');
-      const outcome=select('Follow-up outcome',['missing','unknown','improved','unchanged','worse']),basis=select('Follow-up evidence basis',['user_report','observed_test','model_inference']),correctness=select('Follow-up correctness',['unknown','preserved','regression']),regressions=input('Regressions'),effort=input('Additional effort'),refs=input('Follow-up evidence IDs (comma separated)');
-      const save=line(panel,'button','Save feedback in this workspace');save.setAttribute('type','button');
+      const group=(parent:HTMLElement,title:string)=>{const fields=line(parent,'fieldset',undefined,'feedback-grid');line(fields,'legend',title);return fields;};
+      let fields=group(panel,'Review');
+      const input=(title:string,value='',wide=false)=>{const label=line(fields,'label',undefined,'feedback-field'+(wide?' feedback-wide':''));line(label,'span',title);const field=line(label,'textarea') as HTMLTextAreaElement;field.rows=wide?3:1;field.value=value;return field;};
+      const select=(title:string,options:string[])=>{const label=line(fields,'label',undefined,'feedback-field');line(label,'span',title);const field=line(label,'select') as HTMLSelectElement;options.forEach(value=>{const option=line(field,'option',value.replaceAll('_',' ').replace(/^./,char=>char.toUpperCase())) as HTMLOptionElement;option.value=value;});field.value=options[0]!;return field;};
+      const reviewer=input('Reviewer (anonymous allowed)','anonymous'),decision=select('Decision',['defer','accept','reject']),sufficient=select('Evidence sufficient',['unknown','yes','no']),correct=select('Factually correct',['unknown','yes','no']),rating=select('Usefulness',['unknown','1','2','3','4','5']),reason=input('Reason','',true);
+      fields=group(panel,'Implementation');
+      const attempted=select('Intervention attempt',['not_attempted','attempted','unknown']),change=input('What changed','',true),test=input('Correctness test','',true);
+      const followup=line(panel,'details',undefined,'feedback-followup');line(followup,'summary','Follow-up · optional');line(followup,'p','Fill this in after trying the suggestion.','muted');fields=group(followup,'Outcome');
+      const outcome=select('Follow-up outcome',['missing','unknown','improved','unchanged','worse']),basis=select('Follow-up evidence basis',['user_report','observed_test','model_inference']),correctness=select('Follow-up correctness',['unknown','preserved','regression']),regressions=input('Regressions','',true),effort=input('Additional effort','',true),refs=input('Follow-up evidence IDs (comma separated)','',true);
+      const actions=line(panel,'div',undefined,'feedback-actions');const save=line(actions,'button','Save feedback in this workspace','primary');save.setAttribute('type','button');line(actions,'span','Export your feedback file to keep it after closing this page.','muted');
       save.onclick=()=>{try{
         const file=feedbackForReport(),entry=feedbackDraft(report,rec.id);
         const prior=file.entries.filter(e=>e.recommendation_id===rec.id&&e.reviewer===reviewer.value).at(-1);entry.supersedes=prior?.id??null;entry.reviewer=reviewer.value||'anonymous';

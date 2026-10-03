@@ -1149,35 +1149,52 @@ ${p.arguments ?? p.input ?? ""}`);
       placeholder(timeline, "No timeline events reported.");
     }
     function feedbackForm(parent, rec) {
-      const panel = line(parent, "details");
+      const panel = line(parent, "details", void 0, "feedback-panel");
       line(panel, "summary", "Record local feedback");
-      const status = line(panel, "p", void 0, "muted");
+      const status = line(panel, "p", void 0, "muted feedback-status");
+      status.setAttribute("role", "status");
       const show = () => {
         const entries = feedbackMap.get(feedbackKey)?.entries.filter((e) => e.recommendation_id === rec.id) ?? [];
         status.textContent = entries.length ? entries.map((e) => `${e.reviewer}: ${e.review.decision}; usefulness ${e.review.usefulness ?? "unknown"}; ${e.attempt.state}; follow-up ${e.follow_up?.outcome ?? "missing"} \u2014 ${e.review.reason}`).join("\n") : "Unreviewed. Acceptance, implementation and improvement are separate.";
       };
       show();
-      const input = (title, value = "") => {
-        const label = line(panel, "label", title);
+      const group = (parent2, title) => {
+        const fields3 = line(parent2, "fieldset", void 0, "feedback-grid");
+        line(fields3, "legend", title);
+        return fields3;
+      };
+      let fields2 = group(panel, "Review");
+      const input = (title, value = "", wide = false) => {
+        const label = line(fields2, "label", void 0, "feedback-field" + (wide ? " feedback-wide" : ""));
+        line(label, "span", title);
         const field = line(label, "textarea");
+        field.rows = wide ? 3 : 1;
         field.value = value;
         return field;
       };
       const select = (title, options) => {
-        const label = line(panel, "label", title);
+        const label = line(fields2, "label", void 0, "feedback-field");
+        line(label, "span", title);
         const field = line(label, "select");
         options.forEach((value) => {
-          const option = line(field, "option", value);
+          const option = line(field, "option", value.replaceAll("_", " ").replace(/^./, (char) => char.toUpperCase()));
           option.value = value;
         });
         field.value = options[0];
         return field;
       };
-      const reviewer = input("Reviewer (anonymous allowed)", "anonymous"), decision = select("Decision", ["defer", "accept", "reject"]), sufficient = select("Evidence sufficient", ["unknown", "yes", "no"]), correct = select("Factually correct", ["unknown", "yes", "no"]), rating = select("Usefulness", ["unknown", "1", "2", "3", "4", "5"]), reason = input("Reason");
-      const attempted = select("Intervention attempt", ["not_attempted", "attempted", "unknown"]), change = input("What changed"), test = input("Correctness test");
-      const outcome = select("Follow-up outcome", ["missing", "unknown", "improved", "unchanged", "worse"]), basis = select("Follow-up evidence basis", ["user_report", "observed_test", "model_inference"]), correctness = select("Follow-up correctness", ["unknown", "preserved", "regression"]), regressions = input("Regressions"), effort = input("Additional effort"), refs3 = input("Follow-up evidence IDs (comma separated)");
-      const save = line(panel, "button", "Save feedback in this workspace");
+      const reviewer = input("Reviewer (anonymous allowed)", "anonymous"), decision = select("Decision", ["defer", "accept", "reject"]), sufficient = select("Evidence sufficient", ["unknown", "yes", "no"]), correct = select("Factually correct", ["unknown", "yes", "no"]), rating = select("Usefulness", ["unknown", "1", "2", "3", "4", "5"]), reason = input("Reason", "", true);
+      fields2 = group(panel, "Implementation");
+      const attempted = select("Intervention attempt", ["not_attempted", "attempted", "unknown"]), change = input("What changed", "", true), test = input("Correctness test", "", true);
+      const followup = line(panel, "details", void 0, "feedback-followup");
+      line(followup, "summary", "Follow-up \xB7 optional");
+      line(followup, "p", "Fill this in after trying the suggestion.", "muted");
+      fields2 = group(followup, "Outcome");
+      const outcome = select("Follow-up outcome", ["missing", "unknown", "improved", "unchanged", "worse"]), basis = select("Follow-up evidence basis", ["user_report", "observed_test", "model_inference"]), correctness = select("Follow-up correctness", ["unknown", "preserved", "regression"]), regressions = input("Regressions", "", true), effort = input("Additional effort", "", true), refs3 = input("Follow-up evidence IDs (comma separated)", "", true);
+      const actions = line(panel, "div", void 0, "feedback-actions");
+      const save = line(actions, "button", "Save feedback in this workspace", "primary");
       save.setAttribute("type", "button");
+      line(actions, "span", "Export your feedback file to keep it after closing this page.", "muted");
       save.onclick = () => {
         try {
           const file = feedbackForReport(), entry = feedbackDraft(report, rec.id);

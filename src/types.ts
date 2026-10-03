@@ -103,6 +103,7 @@ export interface Evidence {
 
 export interface Report {
   schema_version: '1.0.0';
+  episodes?: TaskEpisode[];
   provenance?: {analyzer: {version:string;revision:string|null;build_sha256:string};instructions:{skill_sha256:string;guide_sha256:string};interpretations: InterpretationProvenance[]};
   report: {id: string; generated_at: string; analyzer_version: string; mode: 'single_session' | 'multi_session'; status: 'complete' | 'partial'; demo: boolean};
   scope: {session_ids: string[]; excluded_sessions: Array<{id: string; reason: string}>};
@@ -125,4 +126,17 @@ export interface InterpretationProvenance {
   max_chars:number|null;
   context_event_ids:string[];
   model_tokens:number|null;
+}
+
+export interface TaskEpisode {
+  id:string;
+  session_id:string;
+  request_evidence_id:string|null;
+  action_evidence_ids:string[];
+  correction_evidence_ids:string[];
+  verification_evidence_ids:string[];
+  evidence_ids:string[];
+  boundary:'request'|'partial';
+  limitations:string[];
+  outcome:{state:'unknown'|'claimed_complete'|'verified'|'failed'|'blocked';basis:'unassessed'|'assistant_claim'|'reviewer_assessment';criteria:string|null;evidence_ids:string[];reviewer:string|null};
 }

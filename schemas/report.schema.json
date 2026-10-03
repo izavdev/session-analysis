@@ -443,6 +443,122 @@
         }
       },
       "additionalProperties": false
+    },
+    "episodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "request_evidence_id",
+          "action_evidence_ids",
+          "correction_evidence_ids",
+          "verification_evidence_ids",
+          "evidence_ids",
+          "boundary",
+          "limitations",
+          "outcome"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "request_evidence_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "correction_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verification_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "boundary": {
+            "enum": [
+              "request",
+              "partial"
+            ]
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outcome": {
+            "type": "object",
+            "required": [
+              "state",
+              "basis",
+              "criteria",
+              "evidence_ids",
+              "reviewer"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "unknown",
+                  "claimed_complete",
+                  "verified",
+                  "failed",
+                  "blocked"
+                ]
+              },
+              "basis": {
+                "enum": [
+                  "unassessed",
+                  "assistant_claim",
+                  "reviewer_assessment"
+                ]
+              },
+              "criteria": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reviewer": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false,

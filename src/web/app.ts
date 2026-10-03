@@ -429,6 +429,11 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       const models=new Set(session.model_runs.filter(run=>run.model).map(run=>`${run.provider || 'Provider unavailable'} / ${run.model}`));
       models.forEach(model=>line(box,'p',model));
       if (!models.size) line(box,'p','Model not reported.','muted');
+      for(const episode of report.episodes??[]) if(episode.session_id===session.id) {
+        line(box,'h4','Task episode '+episode.id);line(box,'p',`Outcome: ${episode.outcome.state} (${episode.outcome.basis}); criteria: ${episode.outcome.criteria??'unassessed'}`);
+        line(box,'p',`Actions: ${episode.action_evidence_ids.length} · possible corrections: ${episode.correction_evidence_ids.length} · verification references: ${episode.verification_evidence_ids.length}`);
+        episode.limitations.forEach(note=>line(box,'p',note,'muted'));line(box,'p','Evidence: '+episode.evidence_ids.join(', '));
+      }
       line(box,'h4','Timeline');
       const timeline=line(box,'ol',undefined,'timeline');
       session.timeline.forEach(event=>line(timeline,'li',`${event.timestamp || 'Time unavailable'} · ${event.type}${event.tool_name ? ' · '+event.tool_name : ''} · ${event.event_id} · ${event.source_ref}`));

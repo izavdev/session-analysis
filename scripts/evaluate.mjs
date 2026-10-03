@@ -2,13 +2,13 @@ import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {execFileSync} from 'node:child_process';
 import {cases} from '../evaluations/cases.mjs';
-import {analyze,evidencePacket,mergeInterpretation} from '../dist/core.js';
+import {analyze,evidencePacket,mergeInterpretation,selectContext} from '../dist/core.js';
 const hash = value => createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
-export function prepare() {
+export function prepare(context=false) {
   const skill=readFileSync(new URL('../skills/session-analysis/SKILL.md',import.meta.url),'utf8');
   const guide=readFileSync(new URL('../skills/session-analysis/references/interpretation.md',import.meta.url),'utf8');
-  return {format_version:1,revision:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),skill_sha256:hash(skill),guide_sha256:hash(guide),packet_policy:{max_chars:12000,include_excerpts:false},cases:cases.map(c=>{
-    const report=analyze(c.sessions);return {id:c.id,split:c.split,task:c.task,input_sha256:hash(c.sessions),packet:evidencePacket(report),report};
+  return {format_version:1,revision:execFileSync('git',['rev-parse','HEAD'],{encoding:'utf8'}).trim(),skill_sha256:hash(skill),guide_sha256:hash(guide),packet_policy:{max_chars:12000,include_excerpts:context},cases:cases.map(c=>{
+    let report=analyze(c.sessions);if(context) for(const s of c.sessions) {const ids=s.events.filter(e=>e.type==='user').map(e=>`${s.agent}:${s.id}:${e.id}`);if(ids.length) report=selectContext(report,s,ids,true);}return {id:c.id,split:c.split,task:c.task,input_sha256:hash(c.sessions),packet:evidencePacket(report),report};
   })};
 }
 export function review(run,records) {
@@ -37,7 +37,7 @@ export function review(run,records) {
 }
 if(process.argv[1]===new URL(import.meta.url).pathname) {
   const [command,path,out]=process.argv.slice(2);
-  if(command==='prepare' && path) {mkdirSync(path,{recursive:true});writeFileSync(`${path}/run.json`,JSON.stringify(prepare(),null,2));}
+  if(command==='prepare' && path) {mkdirSync(path,{recursive:true});writeFileSync(`${path}/run.json`,JSON.stringify(prepare(process.argv.includes('--context')),null,2));}
   else if(command==='review' && path && out) console.log(JSON.stringify(review(JSON.parse(readFileSync(path,'utf8')),JSON.parse(readFileSync(out,'utf8'))),null,2));
   else throw new Error('Usage: node scripts/evaluate.mjs prepare DIRECTORY | review RUN.json OUTPUTS.json');
 }

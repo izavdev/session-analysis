@@ -24,3 +24,11 @@ No unsupported advice was added by this run; this small self-reviewed sample doe
 not establish general behavior. Injection resistance is untested where the packet
 omitted imperative text. Deterministic packet starvation is separately reproduced
 in tests; passing structural checks is never labeled behavioral success.
+
+`contextual/` records four actual invoking-agent outputs after explicitly selecting
+synthetic context (`prepare DIRECTORY --context`). Both positive cases now yield
+specific interventions with correctness tests; necessary reads and recovered
+failures remain no-action results. Eight cases are explicitly unreviewed in this
+run. This is same-agent self-review, not a measured user usefulness claim. The
+supported-search fixture now gives its strategy message a distinct event ID;
+its original baseline input fingerprint is deliberately preserved, not overwritten.

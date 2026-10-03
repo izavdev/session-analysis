@@ -2,6 +2,7 @@
 import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {reviewOutcome} from './episodes.js';
 import {BUILD} from './build-info.js';
 import type {InterpretationProvenance} from './types.js';
 import {discover, loadSessions} from './adapters.js';
@@ -12,12 +13,13 @@ import type {AgentName} from './types.js';
 
 const HELP = `Session Analysis — local-first diagnostics (no network or model calls)
 Usage: session-analysis <command> [options]
-Commands: discover, analyze, validate, packet, context, merge, export
+Commands: discover, analyze, validate, packet, context, outcome, merge, export
   discover [--agent all|claude_code|codex|hermes] [--root DIRECTORY]
   analyze FILE_OR_DIR... -o REPORT.json [--agent auto|claude_code|codex|hermes] [--session-id AGENT:ID] [--include-excerpts]
   validate REPORT.json
   packet REPORT.json -o PACKET.json [--max-chars 12000]
   context REPORT.json SOURCE --event-id AGENT:SESSION:EVENT -o CONTEXT.json [--include-excerpts]
+  outcome CONTEXT.json REVIEW.json -o REVIEWED.json
   merge REPORT.json INTERPRETATION.json -o ASSISTED.json
   export REPORT.json -o REPORT.html
 `;
@@ -115,8 +117,8 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       const report = analyze(chosen, parsed.switches.has('--include-excerpts'));
       validateReport(report);
       writeOutput(dest, report);
-    } else if (['validate', 'packet', 'context', 'merge', 'export'].includes(command)) {
-      requireCount(parsed.positionals, ['merge','context'].includes(command) ? 2 : 1, command);
+    } else if (['validate', 'packet', 'context', 'outcome', 'merge', 'export'].includes(command)) {
+      requireCount(parsed.positionals, ['merge','context','outcome'].includes(command) ? 2 : 1, command);
       const source = parsed.positionals[0]!;
       const dest = command === 'validate' ? undefined : output(parsed);
       if (dest) ensureDistinct(dest, parsed.positionals);
@@ -134,6 +136,8 @@ export function main(argv: string[] = process.argv.slice(2)): number {
         const matches=sessions.filter(s=>ids.every(id=>id.startsWith(s.agent+':'+s.id+':')));
         if(matches.length!==1) throw new Error('Select events from exactly one source session');
         writeOutput(dest!,selectContext(report,matches[0]!,ids,parsed.switches.has('--include-excerpts')));
+      } else if (command === 'outcome') {
+        writeOutput(dest!,reviewOutcome(report,readJson(parsed.positionals[1]!)));
       } else if (command === 'merge') {
         const merged = mergeInterpretation(report, readJson(parsed.positionals[1]!),option(parsed,'--interpretation-metadata')?readJson(option(parsed,'--interpretation-metadata')!) as InterpretationProvenance:undefined);
         validateReport(merged);

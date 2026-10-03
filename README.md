@@ -64,6 +64,26 @@ npx --no-install session-analysis merge report.json interpretation.json -o assis
 npx --no-install session-analysis export assisted.json -o assisted.html
 ```
 
+For selected task context, use the source session and namespaced event IDs from the report timeline:
+
+```sh
+npx --no-install session-analysis context report.json selected-session.jsonl --event-id codex:SESSION:e1 -o context.json
+# Explicitly opt in to bounded text with --include-excerpts when appropriate.
+npx --no-install session-analysis packet context.json --finding-id FINDING_ID -o packet.json
+npx --no-install session-analysis merge context.json interpretation.json -o assisted.json
+```
+
+Context validates source fingerprints and call/result linkage, registers citeable evidence,
+and preserves computed metrics. Legacy reports without source fingerprints must be regenerated
+for context registration. Claude and Codex rollout support native viewer inspection; other
+normalized adapters support CLI context without equivalent native viewer drill-down.
+Reports retain schema 1.0.0 compatibility with additive source, observation coverage and
+provenance fields. Old reports remain readable. Observed error/load counts can be incomplete;
+missing status is not a measured zero. `VERSION` drives release metadata; build hashes identify
+producing analyzer code. Merge accepts an optional `--interpretation-metadata FILE` containing
+model, instruction/packet hashes, max_chars, context_event_ids and model_tokens; unknown values
+remain null. Export does not alter analysis identity.
+
 The packet has a **serialized character budget**, not a claimed token budget. Interpretation is optional and uses the agent you are already working with. No model calls happen inside this toolkit. The merger rejects unknown references and attempts to replace computed metrics; it cannot guarantee a model's explanation is true.
 
 ## Portable skill

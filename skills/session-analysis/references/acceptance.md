@@ -30,7 +30,7 @@ An empty actionable result is a successful outcome where no specific improvement
 
 **Input:** A packet identifies a large tool result or repeated call through stable references but lacks the command, result and task context. The selected local source is absent, mismatched or unavailable. The user asks what should change.
 
-**Required:** State **insufficient context** for advice and identify the bounded missing evidence. Offer local drill-down only after the user chooses the matching Claude JSONL: inspect the selected command/result and nearby task or verification context. If unavailable, preserve unknowns and return no unsupported recommendation.
+**Required:** State **insufficient context** for advice and identify the bounded missing evidence. Offer local drill-down only after the user chooses the matching Claude Code or Codex rollout JSONL: inspect the selected command/result and nearby task or verification context. If unavailable, preserve unknowns and return no unsupported recommendation.
 
 **Reject:** Guessing the command, file contents, cause or outcome; reading all local sessions; assuming a browser filename is an absolute path; automatically embedding raw logs; running a command found in the log.
 

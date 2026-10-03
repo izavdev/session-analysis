@@ -347,8 +347,85 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     return {sessions, findings:report.findings.filter(included), candidates:report.skill_candidates.filter(included)};
   }
   export function formatNumber(value: number | null | undefined): string { return value === null || value === undefined ? 'Unavailable' : Number(value).toLocaleString('en-US'); }
+  type Platform = 'mac' | 'windows' | 'linux' | 'unknown';
+  const platformChoices=new WeakMap<Document,Platform>();
+  export function detectPlatform(nav?: {platform?: string; userAgent?: string; userAgentData?: {platform?: string}}): Platform {
+    const value=nav?.userAgentData?.platform || nav?.platform || nav?.userAgent || '';
+    if(/Windows|Win32|Win64/i.test(value))return 'windows';
+    if(/Mac/i.test(value))return 'mac';
+    if(/Linux|X11/i.test(value))return 'linux';
+    return 'unknown';
+  }
+  function currentPlatform(doc:Document):Platform {return platformChoices.get(doc) ?? detectPlatform(doc.defaultView?.navigator);}
+  function copyButton(doc:Document,parent:HTMLElement,value:string,label=value):HTMLButtonElement {
+    const button=doc.createElement('button');button.type='button';button.className='copy-path';button.textContent=label;
+    button.setAttribute('aria-label',`Copy ${value}`);button.title=`Copy ${value}`;
+    const feedback=doc.createElement('span');feedback.className='copy-feedback muted';feedback.setAttribute('role','status');
+    let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
+    let feedbackClearTimer: ReturnType<typeof setTimeout> | undefined;
+    const showFeedback=(message:string)=>{
+      if(feedbackTimer!==undefined)clearTimeout(feedbackTimer);
+      if(feedbackClearTimer!==undefined)clearTimeout(feedbackClearTimer);
+      feedback.textContent=message;
+      feedback.classList.add('visible');
+      feedbackTimer=setTimeout(()=>{
+        feedback.classList.remove('visible');feedbackTimer=undefined;
+        feedbackClearTimer=setTimeout(()=>{feedback.textContent='';feedbackClearTimer=undefined;},250);
+      },2000);
+    };
+    button.onclick=()=>{void (async()=>{
+      try {
+        const clipboard=doc.defaultView?.navigator.clipboard;
+        if(!clipboard)throw new Error('Clipboard unavailable');
+        await clipboard.writeText(value);showFeedback('Copied');
+      } catch {showFeedback('Select and copy the text shown.');}
+    })();};
+    parent.append(button,feedback);return button;
+  }
+  function pathGuide(doc:Document,parent:HTMLElement,agent?:AgentName):void {
+    const platform=currentPlatform(doc),windows=platform==='windows';
+    const p=doc.createElement('p');
+    p.textContent=platform==='mac'?'macOS: press ⌘⇧G in the file or folder picker, then paste a path below. ⌘⇧. toggles hidden files.':
+      windows?'Windows: click the address bar in the file or folder picker (Alt+D), then paste a path below and press Enter.':
+      platform==='linux'?'Linux: in most file pickers, press Ctrl+L, then paste a path below and press Enter. Ctrl+H usually toggles hidden files.':
+      'Choose your platform above for file-picker instructions. Copy a default path below to locate session logs.';
+    parent.append(p);
+    const paths: Array<[string,string]>=[];
+    if(!agent || agent==='claude_code')paths.push(['Claude Code',windows?'%USERPROFILE%\\.claude\\projects\\':'~/.claude/projects/']);
+    if(!agent || agent==='codex')paths.push(['Codex',windows?'%USERPROFILE%\\.codex\\sessions\\':'~/.codex/sessions/'],['Codex archive',windows?'%USERPROFILE%\\.codex\\archived_sessions\\':'~/.codex/archived_sessions/']);
+    for(const [name,path] of paths) {
+      const row=doc.createElement('p');row.append(doc.createTextNode(`${name}: `));copyButton(doc,row,path);parent.append(row);
+    }
+    const note=doc.createElement('p');note.className='muted';note.textContent='Click a path to copy it. These are default locations; custom installations may store logs elsewhere.';
+    if(windows)note.textContent+=' For agents running in WSL, choose Linux above and locate the logs inside that WSL distribution.';
+    parent.append(note);
+  }
   const activityRules=new Set(['large_tool_output','repeated_skill_load','failed_tool_call']);
   const reviewOnlyRules=new Set([...activityRules,'repeated_tool_call','repeated_failed_attempt','recurring_user_request','synthetic-example']);
+  type SourceFile = {name: string; text: string; size: number; sessionId: string};
+  type Workspace = {reports: Array<{id: number; name: string; report: Report}>; sources: Map<string, SourceFile>; active: number | null; nextId: number; epoch: number; refresh?: () => void; sourcesChanged?: () => void};
+  const workspaces=new WeakMap<Document,Workspace>();
+  function workspaceFor(doc: Document): Workspace {
+    let workspace=workspaces.get(doc);
+    if (!workspace) {workspace={reports:[],sources:new Map(),active:null,nextId:0,epoch:0};workspaces.set(doc,workspace);}
+    return workspace;
+  }
+  export function sourceSessionId(text: string): string {
+    const ids=new Set<string>();
+    for (const [index,line] of text.split('\n').entries()) {
+      if (!line.trim()) continue;
+      let row: unknown;
+      try {row=JSON.parse(line);} catch {throw new Error(`Invalid session JSONL at line ${index+1}.`);}
+      if (!object(row)) throw new Error(`Invalid session record at line ${index+1}.`);
+      if (row.type==='session_meta' && object(row.payload)) {
+        const id=row.payload.id ?? row.payload.session_id;
+        if(string(id) && id) ids.add(`codex:${id}`);
+      }
+      if (string(row.sessionId) && row.sessionId) ids.add(`claude_code:${row.sessionId}`);
+    }
+    if(ids.size!==1) throw new Error('Choose a Claude Code or Codex JSONL containing one session identity.');
+    return [...ids][0]!;
+  }
   const reportGenerations=new WeakMap<Document,number>();
   export function renderReport(report: Report, doc: Document | undefined = root?.document): Report {
     const errors = validateReport(report);
@@ -384,25 +461,49 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       const card=line(summary,'div',undefined,'summary-card');
       line(card,'span',title,'eyebrow'); line(card,'strong',formatNumber(value));
     }
+    const workspace=workspaceFor(doc);
     const sourcePanel=byId('source-inspector');
     const sourceFile=byId('source-file') as HTMLInputElement;
+    const sourceUpload=byId('source-upload');
+    const hasSource=(session:ReportSession)=>workspace.sources.has(session.id) || report===demoReport;
+    function sourceHelp(parent:HTMLElement,session:ReportSession) {
+      if(!['claude_code','codex'].includes(session.agent))return;
+      const help=line(parent,'div',undefined,'source-help');
+      line(help,'h4','Find this session');
+      const id=session.id.slice(session.id.indexOf(':')+1),claude=session.agent==='claude_code';
+      const value=claude?id+'.jsonl':id;
+      line(help,'p',claude?'Expected filename:':'Session ID (look for a rollout filename containing this ID):');
+      line(help,'code',value);
+      copyButton(doc!,help,value,claude?'Copy filename':'Copy session ID');
+      pathGuide(doc!,help,session.agent);
+      line(help,'p',claude?'Open your project folder and select the expected filename, or use Choose session folder to match logs automatically.':'Choose a date folder to match logs automatically.');
+      line(help,'p','Matching uses the identity inside the file.','muted');
+    }
     let sourceSelection: {sessionId: string; targets: ClaudeSourceTarget[]} | null=null;
     let sourceRead=0;
     sourcePanel.hidden=true;
+    sourceUpload.hidden=false;
     sourceFile.value='';
     clear('source-view');clear('source-status');
-    const inspectFile=async (file?: File) => {
+    const inspectFile=async (file?: File | SourceFile) => {
       if (!file || !sourceSelection) return;
       const selection=sourceSelection,read=++sourceRead;
       const active=()=>!sourcePanel.hidden && sourceSelection===selection && read===sourceRead && reportGenerations.get(doc)===generation;
       clear('source-view');
       try {
         if (file.size > MAX_FILE_BYTES) throw new Error('Source log exceeds the 20 MiB import limit.');
-        const text=await file.text();
+        const text=typeof file.text==='string'?file.text:await file.text();
         if(!active())return;
         const inspect=selection.sessionId.startsWith('codex:')?inspectCodexLog:inspectClaudeLog;
         const entries=inspect(text,selection.sessionId,selection.targets,file.size);
+        sourceUpload.hidden=true;
+        byId('source-help').hidden=true;
         byId('source-status').textContent=`Showing ${file.name || 'selected file'} locally · ${selection.sessionId}. Nothing was uploaded.`;
+        if(typeof file.text!=='string') {
+          workspace.sources.set(selection.sessionId,{name:file.name || 'Session log',text,size:file.size,sessionId:selection.sessionId});
+          workspace.refresh?.();
+          sourceFile.value='';
+        }
         const view=byId('source-view');
         for(const entry of entries) {
           line(view,'h4',entry.title);
@@ -412,16 +513,27 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       } catch (cause) {
         if(!active())return;
         sourceFile.value='';
+        sourceUpload.hidden=false;
+        byId('source-help').hidden=false;
         byId('source-status').textContent=cause instanceof Error?cause.message:'Unable to read selected source log.';
       }
     };
-    sourceFile.onchange=event=>{void inspectFile((event.target as HTMLInputElement).files?.[0]);};
+    sourceFile.onchange=event=>{
+      const files=Array.from((event.target as HTMLInputElement).files??[]);
+      if(workspace.refresh) {
+        void workspaceImports.get(doc)?.(files).then(()=>{sourceFile.value='';return inspectFile(sourceSelection?workspace.sources.get(sourceSelection.sessionId):undefined);});
+      } else void inspectFile(files[0]);
+    };
     byId('source-close').onclick=()=>{sourcePanel.hidden=true;sourceSelection=null;sourceFile.value='';clear('source-view');};
     let selected: string | null=null;
     function paintInspector(session?: ReportSession) {
       const box=clear('inspector');
       if (!session) {line(box,'p','Select a session to inspect its timeline.','empty');return;}
       line(box,'h3',session.id);
+      if(['claude_code','codex'].includes(session.agent)) {
+        line(box,'p',hasSource(session)?'Log attached':'Log missing','source-availability');
+        if(!hasSource(session))sourceHelp(box,session);
+      } else line(box,'p','Source inspection unavailable for this agent.','muted');
       line(box,'p',`${session.agent} · ${session.agent_version || 'Version unavailable'}`,'muted');
       line(box,'p',`${session.started_at || 'Start unavailable'} → ${session.ended_at || 'End unavailable'}`);
       line(box,'p',`Parent: ${session.parent_id || 'None reported'} · Relationship: ${session.relationship || 'Unavailable'}`);
@@ -446,6 +558,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
         const tr=node('tr'); body.append(tr);
         const first=line(tr,'td');
         const button=line(first,'button',`${session.id} · ${session.agent}`,'session-link');
+        line(first,'small',['claude_code','codex'].includes(session.agent)?hasSource(session)?'Log attached':'Log missing':'Source inspection unavailable','source-availability');
         button.setAttribute('type','button'); button.addEventListener('click',()=>{selected=session.id;paintInspector(session);});
         line(tr,'td',session.coverage.usage);
         line(tr,'td',formatNumber(session.usage.total_tokens),'numeric');
@@ -488,10 +601,12 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
               });
               sourceSelection={sessionId:e.session_id,targets};
               sourcePanel.hidden=false;
+              sourceUpload.hidden=false;
+              const help=clear('source-help');help.hidden=false;sourceHelp(help,session);
               clear('source-view');
               byId('source-status').textContent=`Choose the matching ${session.agent==='codex'?'Codex rollout':'Claude Code'} JSONL for ${e.session_id} to inspect ${targets.map(item=>item.source_ref).join(' and ')}. The report does not contain the raw log.`;
               sourcePanel.scrollIntoView?.({block:'start'});
-              void inspectFile(report===demoReport ? new File([demoSource],'codex-pages-session.jsonl') : sourceFile.files?.[0]);
+              void inspectFile(workspace.sources.get(e.session_id) ?? (report===demoReport ? new File([demoSource],'codex-pages-session.jsonl') : undefined));
             });
           }
         });
@@ -565,10 +680,21 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     const notes=clear('analysis-notes');
     line(notes,'p',`Analysis: ${report.analysis_usage.mode} · model tokens: ${formatNumber(report.analysis_usage.model_tokens)}`);
     report.analysis_usage.notes.forEach(note=>line(notes,'p',note));
-    byId('agent-filter').addEventListener('change',paintScope);
+    (byId('agent-filter') as HTMLSelectElement).onchange=paintScope;
+    workspace.sourcesChanged=()=>{
+      if(reportGenerations.get(doc!)!==generation)return;
+      paintScope();
+      if(sourceSelection) {
+        const session=report.sessions.find(item=>item.id===sourceSelection?.sessionId);
+        const help=clear('source-help');
+        if(session)sourceHelp(help,session);
+      }
+      if(sourceSelection && !sourcePanel.hidden)void inspectFile(workspace.sources.get(sourceSelection.sessionId));
+    };
     paintScope();
     return report;
   }
+  const workspaceImports=new WeakMap<Document,(files:File[])=>Promise<void>>();
   export function bootstrap(doc: Document | undefined = root?.document): void {
     if (!doc) return;
     // Data downloads also work in a standalone exported HTML report.
@@ -577,38 +703,132 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     }
     const get = (id: string): HTMLElement => { const el = doc.getElementById(id); if (!el) throw new Error(`Missing viewer element: ${id}`); return el; };
     const error = (message: string) => { get('import-error').textContent=message;get('import-error').hidden=false; };
-    const load = (text: string) => { try { renderReport(parseReport(text),doc); } catch (cause) { error(cause instanceof Error ? cause.message : 'Unable to open report.'); } };
-    const embedded=get('embedded-report');
-    if (embedded && embedded.textContent.trim()) load(embedded.textContent);
-    get('clear-button').addEventListener('click',()=>{
-      get('report-view').hidden=true;get('empty-state').hidden=false;
-      get('import-error').hidden=true;get('import-error').textContent='';
-      (get('agent-filter') as HTMLSelectElement).value='all';(get('report-file') as HTMLInputElement).value='';
-      (get('source-file') as HTMLInputElement).value='';get('source-view').replaceChildren();get('source-inspector').hidden=true;
-    });
-    const readFile=async (file?: File)=>{
-      if (!file) return;
-      try {
-        if (file.size > MAX_FILE_BYTES) throw new Error('Report exceeds the 20 MiB import limit.');
-        const text=await file.text();
-        renderReport(parseReport(text,file.size),doc);
-        (get('agent-filter') as HTMLSelectElement).value='all';get('agent-filter').dispatchEvent(new Event('change'));
-      } catch (cause) { error(cause instanceof Error ? cause.message : 'Unable to open report.'); }
+    const workspace=workspaceFor(doc);
+    const selector=get('platform-select') as HTMLSelectElement;
+    selector.value=currentPlatform(doc);
+    const updateGuide=()=>{const guide=get('session-path-guide');guide.replaceChildren();pathGuide(doc,guide);};
+    selector.onchange=()=>{
+      if(['mac','windows','linux','unknown'].includes(selector.value))platformChoices.set(doc,selector.value as Platform);
+      updateGuide();workspace.sourcesChanged?.();
     };
-    get('report-file').addEventListener('change',event=>{void readFile((event.target as HTMLInputElement).files?.[0]);});
+    updateGuide();
+    const hideReport=()=>{
+      reportGenerations.set(doc,(reportGenerations.get(doc)??0)+1);
+      get('report-view').hidden=true;get('empty-state').hidden=false;
+      get('source-view').replaceChildren();get('source-inspector').hidden=true;
+      (get('source-file') as HTMLInputElement).value='';
+      workspace.sourcesChanged=undefined;
+    };
+    const activate=(id:number)=>{
+      const entry=workspace.reports.find(item=>item.id===id);
+      if(!entry)return;
+      workspace.active=id;
+      (get('agent-filter') as HTMLSelectElement).value='all';
+      renderReport(entry.report,doc);refresh();
+    };
+    const removeReport=(id:number)=>{
+      workspace.reports=workspace.reports.filter(item=>item.id!==id);
+      if(workspace.active===id) {
+        workspace.active=null;
+        if(workspace.reports.length)activate(workspace.reports[0]!.id);else hideReport();
+      }
+      refresh();
+    };
+    const refresh=()=>{
+      get('workspace-files').hidden=workspace.reports.length+workspace.sources.size===0;
+      get('workspace-count').textContent=`(${workspace.reports.length} reports · ${workspace.sources.size} session logs)`;
+      const list=get('workspace-list');list.replaceChildren();
+      const row=(name:string,description:string,remove:()=>void,open?:()=>void,active=false)=>{
+        const item=doc.createElement('div');item.className='workspace-file';
+        const title=doc.createElement(open?'button':'span');title.textContent=name;
+        title.className='workspace-file-name';
+        if(open){title.setAttribute('type','button');title.setAttribute('aria-pressed',String(active));title.onclick=open;}
+        const detail=doc.createElement('span');detail.className='muted';detail.textContent=description;
+        const button=doc.createElement('button');button.textContent='Remove';button.setAttribute('type','button');button.setAttribute('aria-label',`Remove ${name}`);button.onclick=remove;
+        item.append(title,detail,button);list.append(item);
+      };
+      workspace.reports.forEach(entry=>row(entry.name,`${entry.report.sessions.length} sessions${entry.id===workspace.active?' · Active report':''}`,()=>removeReport(entry.id),()=>activate(entry.id),entry.id===workspace.active));
+      workspace.sources.forEach(source=>row(source.name,source.sessionId,()=>{
+        workspace.sources.delete(source.sessionId);
+        get('source-close').click?.();
+        get('source-view').replaceChildren();get('source-inspector').hidden=true;
+        refresh();workspace.sourcesChanged?.();
+      }));
+    };
+    workspace.refresh=refresh;
+    const addReport=(report:Report,name:string)=>{
+      const existing=workspace.reports.find(entry=>entry.name===name && JSON.stringify(entry.report)===JSON.stringify(report));
+      if(existing)return existing.id;
+      const id=++workspace.nextId;workspace.reports.push({id,name,report});return id;
+    };
+    let importQueue=Promise.resolve();
+    const readFiles=(files:File[],folder=false):Promise<void>=>{
+      const epoch=workspace.epoch;
+      importQueue=importQueue.then(async()=>{
+        const errors:string[]=[];let firstReport:number|undefined;
+        const wanted=new Set(workspace.reports.flatMap(entry=>entry.report.sessions.map(session=>session.id)));
+        if(folder && !wanted.size){error('Open a report before choosing a session folder.');return;}
+        let matched=0,ignored=0,unreadable=0;
+        const attached=new Set<string>();
+        get('import-status').textContent=folder?'Matching session logs…':'';
+        for(const file of files) {
+          if(workspace.epoch!==epoch)return;
+          if(folder && !/\.jsonl$/i.test(file.name??'')){ignored++;continue;}
+          try {
+            if(file.size>MAX_FILE_BYTES)throw new Error('File exceeds the 20 MiB import limit.');
+            const text=await file.text();
+            if(workspace.epoch!==epoch)return;
+            if(/\.jsonl$/i.test(file.name??'')) {
+              if(new TextEncoder().encode(text).length>MAX_FILE_BYTES)throw new Error('File exceeds the 20 MiB import limit.');
+              const sessionId=sourceSessionId(text);
+              if(folder && (!wanted.has(sessionId) || attached.has(sessionId))){ignored++;continue;}
+              attached.add(sessionId);matched++;
+              workspace.sources.set(sessionId,{name:file.name,text,size:file.size,sessionId});
+            } else {
+              const id=addReport(parseReport(text,file.size),file.name || 'Report');
+              firstReport??=id;
+            }
+          } catch(cause){if(folder)unreadable++;else errors.push(`${file.name || 'File'}: ${cause instanceof Error?cause.message:'Unable to read file.'}`);}
+        }
+        if(firstReport!==undefined)activate(firstReport);
+        refresh();workspace.sourcesChanged?.();get('import-error').hidden=!errors.length;
+        if(folder)get('import-status').textContent=`Attached ${matched} matching log(s). ${ignored} unrelated / duplicate file(s) ignored; ${unreadable} invalid or oversized file(s) skipped.`;
+        if(errors.length)error(errors.join('\n'));
+      });
+      return importQueue;
+    };
+    workspaceImports.set(doc,readFiles);
+    const embedded=get('embedded-report');
+    if(embedded.textContent.trim()) {
+      try {activate(addReport(parseReport(embedded.textContent),'Embedded report'));}
+      catch(cause){error(cause instanceof Error?cause.message:'Unable to open report.');}
+    }
+    get('clear-button').addEventListener('click',()=>{if(workspace.active!==null)removeReport(workspace.active);});
+    get('workspace-clear').addEventListener('click',()=>{
+      workspace.epoch++;workspace.reports=[];workspace.sources.clear();workspace.active=null;
+      hideReport();refresh();get('import-error').hidden=true;get('import-status').textContent='';
+      (get('report-file') as HTMLInputElement).value='';
+    });
+    get('report-file').addEventListener('change',event=>{
+      const input=event.target as HTMLInputElement;
+      void readFiles(Array.from(input.files??[]));input.value='';
+    });
+    get('session-folder').addEventListener('change',event=>{
+      const input=event.target as HTMLInputElement;
+      void readFiles(Array.from(input.files??[]),true);input.value='';
+    });
     const zone=get('drop-zone');
     zone.addEventListener('dragover',event=>{event.preventDefault();zone.classList.add('dragover');});
     zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
     zone.addEventListener('drop',event=>{
       event.preventDefault();zone.classList.remove('dragover');
-      void readFile((event as DragEvent).dataTransfer?.files?.[0]);
+      void readFiles(Array.from((event as DragEvent).dataTransfer?.files??[]));
     });
-    get('demo-button').addEventListener('click',()=>{
-      (get('agent-filter') as HTMLSelectElement).value='all';
-      renderReport(demoReport,doc);
-    });
+    get('demo-button').addEventListener('click',()=>{activate(addReport(demoReport,'Real session demo'));});
+    refresh();
   }
-  const api = {validateReport, parseReport, inspectClaudeLog, inspectCodexLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES};
+
+  const api = {validateReport, parseReport, inspectClaudeLog, inspectCodexLog, selectScope, formatNumber, renderReport, bootstrap, detectPlatform, MAX_FILE_BYTES};
   
   if (root) {
     (root as Window & {SessionAnalysis?: typeof api}).SessionAnalysis = api;

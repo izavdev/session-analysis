@@ -1,5 +1,6 @@
 import { copyFileSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import './build-version.mjs';
 
 const output = fileURLToPath(new URL('../_site/', import.meta.url));
 // Recreate the site; only viewer assets and the two explicitly curated demo files are published.

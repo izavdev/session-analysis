@@ -491,8 +491,109 @@ ${p.arguments ?? p.input ?? ""}`);
   function formatNumber(value) {
     return value === null || value === void 0 ? "Unavailable" : Number(value).toLocaleString("en-US");
   }
+  var platformChoices = /* @__PURE__ */ new WeakMap();
+  function detectPlatform(nav) {
+    const value = nav?.userAgentData?.platform || nav?.platform || nav?.userAgent || "";
+    if (/Windows|Win32|Win64/i.test(value)) return "windows";
+    if (/Mac/i.test(value)) return "mac";
+    if (/Linux|X11/i.test(value)) return "linux";
+    return "unknown";
+  }
+  function currentPlatform(doc) {
+    return platformChoices.get(doc) ?? detectPlatform(doc.defaultView?.navigator);
+  }
+  function copyButton(doc, parent, value, label = value) {
+    const button = doc.createElement("button");
+    button.type = "button";
+    button.className = "copy-path";
+    button.textContent = label;
+    button.setAttribute("aria-label", `Copy ${value}`);
+    button.title = `Copy ${value}`;
+    const feedback = doc.createElement("span");
+    feedback.className = "copy-feedback muted";
+    feedback.setAttribute("role", "status");
+    let feedbackTimer;
+    let feedbackClearTimer;
+    const showFeedback = (message) => {
+      if (feedbackTimer !== void 0) clearTimeout(feedbackTimer);
+      if (feedbackClearTimer !== void 0) clearTimeout(feedbackClearTimer);
+      feedback.textContent = message;
+      feedback.classList.add("visible");
+      feedbackTimer = setTimeout(() => {
+        feedback.classList.remove("visible");
+        feedbackTimer = void 0;
+        feedbackClearTimer = setTimeout(() => {
+          feedback.textContent = "";
+          feedbackClearTimer = void 0;
+        }, 250);
+      }, 2e3);
+    };
+    button.onclick = () => {
+      void (async () => {
+        try {
+          const clipboard = doc.defaultView?.navigator.clipboard;
+          if (!clipboard) throw new Error("Clipboard unavailable");
+          await clipboard.writeText(value);
+          showFeedback("Copied");
+        } catch {
+          showFeedback("Select and copy the text shown.");
+        }
+      })();
+    };
+    parent.append(button, feedback);
+    return button;
+  }
+  function pathGuide(doc, parent, agent) {
+    const platform = currentPlatform(doc), windows = platform === "windows";
+    const p = doc.createElement("p");
+    p.textContent = platform === "mac" ? "macOS: press \u2318\u21E7G in the file or folder picker, then paste a path below. \u2318\u21E7. toggles hidden files." : windows ? "Windows: click the address bar in the file or folder picker (Alt+D), then paste a path below and press Enter." : platform === "linux" ? "Linux: in most file pickers, press Ctrl+L, then paste a path below and press Enter. Ctrl+H usually toggles hidden files." : "Choose your platform above for file-picker instructions. Copy a default path below to locate session logs.";
+    parent.append(p);
+    const paths = [];
+    if (!agent || agent === "claude_code") paths.push(["Claude Code", windows ? "%USERPROFILE%\\.claude\\projects\\" : "~/.claude/projects/"]);
+    if (!agent || agent === "codex") paths.push(["Codex", windows ? "%USERPROFILE%\\.codex\\sessions\\" : "~/.codex/sessions/"], ["Codex archive", windows ? "%USERPROFILE%\\.codex\\archived_sessions\\" : "~/.codex/archived_sessions/"]);
+    for (const [name, path] of paths) {
+      const row = doc.createElement("p");
+      row.append(doc.createTextNode(`${name}: `));
+      copyButton(doc, row, path);
+      parent.append(row);
+    }
+    const note = doc.createElement("p");
+    note.className = "muted";
+    note.textContent = "Click a path to copy it. These are default locations; custom installations may store logs elsewhere.";
+    if (windows) note.textContent += " For agents running in WSL, choose Linux above and locate the logs inside that WSL distribution.";
+    parent.append(note);
+  }
   var activityRules = /* @__PURE__ */ new Set(["large_tool_output", "repeated_skill_load", "failed_tool_call"]);
   var reviewOnlyRules = /* @__PURE__ */ new Set([...activityRules, "repeated_tool_call", "repeated_failed_attempt", "recurring_user_request", "synthetic-example"]);
+  var workspaces = /* @__PURE__ */ new WeakMap();
+  function workspaceFor(doc) {
+    let workspace = workspaces.get(doc);
+    if (!workspace) {
+      workspace = { reports: [], sources: /* @__PURE__ */ new Map(), active: null, nextId: 0, epoch: 0 };
+      workspaces.set(doc, workspace);
+    }
+    return workspace;
+  }
+  function sourceSessionId(text) {
+    const ids = /* @__PURE__ */ new Set();
+    for (const [index, line] of text.split("\n").entries()) {
+      if (!line.trim()) continue;
+      let row;
+      try {
+        row = JSON.parse(line);
+      } catch {
+        throw new Error(`Invalid session JSONL at line ${index + 1}.`);
+      }
+      if (!object(row)) throw new Error(`Invalid session record at line ${index + 1}.`);
+      if (row.type === "session_meta" && object(row.payload)) {
+        const id = row.payload.id ?? row.payload.session_id;
+        if (string(id) && id) ids.add(`codex:${id}`);
+      }
+      if (string(row.sessionId) && row.sessionId) ids.add(`claude_code:${row.sessionId}`);
+    }
+    if (ids.size !== 1) throw new Error("Choose a Claude Code or Codex JSONL containing one session identity.");
+    return [...ids][0];
+  }
   var reportGenerations = /* @__PURE__ */ new WeakMap();
   function renderReport(report, doc = root?.document) {
     const errors = validateReport(report);
@@ -544,11 +645,28 @@ ${p.arguments ?? p.input ?? ""}`);
       line(card, "span", title, "eyebrow");
       line(card, "strong", formatNumber(value));
     }
+    const workspace = workspaceFor(doc);
     const sourcePanel = byId("source-inspector");
     const sourceFile = byId("source-file");
+    const sourceUpload = byId("source-upload");
+    const hasSource = (session) => workspace.sources.has(session.id) || report === demoReport;
+    function sourceHelp(parent, session) {
+      if (!["claude_code", "codex"].includes(session.agent)) return;
+      const help = line(parent, "div", void 0, "source-help");
+      line(help, "h4", "Find this session");
+      const id = session.id.slice(session.id.indexOf(":") + 1), claude = session.agent === "claude_code";
+      const value = claude ? id + ".jsonl" : id;
+      line(help, "p", claude ? "Expected filename:" : "Session ID (look for a rollout filename containing this ID):");
+      line(help, "code", value);
+      copyButton(doc, help, value, claude ? "Copy filename" : "Copy session ID");
+      pathGuide(doc, help, session.agent);
+      line(help, "p", claude ? "Open your project folder and select the expected filename, or use Choose session folder to match logs automatically." : "Choose a date folder to match logs automatically.");
+      line(help, "p", "Matching uses the identity inside the file.", "muted");
+    }
     let sourceSelection = null;
     let sourceRead = 0;
     sourcePanel.hidden = true;
+    sourceUpload.hidden = false;
     sourceFile.value = "";
     clear("source-view");
     clear("source-status");
@@ -559,11 +677,18 @@ ${p.arguments ?? p.input ?? ""}`);
       clear("source-view");
       try {
         if (file.size > MAX_FILE_BYTES) throw new Error("Source log exceeds the 20 MiB import limit.");
-        const text = await file.text();
+        const text = typeof file.text === "string" ? file.text : await file.text();
         if (!active()) return;
         const inspect = selection.sessionId.startsWith("codex:") ? inspectCodexLog : inspectClaudeLog;
         const entries = inspect(text, selection.sessionId, selection.targets, file.size);
+        sourceUpload.hidden = true;
+        byId("source-help").hidden = true;
         byId("source-status").textContent = `Showing ${file.name || "selected file"} locally \xB7 ${selection.sessionId}. Nothing was uploaded.`;
+        if (typeof file.text !== "string") {
+          workspace.sources.set(selection.sessionId, { name: file.name || "Session log", text, size: file.size, sessionId: selection.sessionId });
+          workspace.refresh?.();
+          sourceFile.value = "";
+        }
         const view = byId("source-view");
         for (const entry of entries) {
           line(view, "h4", entry.title);
@@ -573,11 +698,19 @@ ${p.arguments ?? p.input ?? ""}`);
       } catch (cause) {
         if (!active()) return;
         sourceFile.value = "";
+        sourceUpload.hidden = false;
+        byId("source-help").hidden = false;
         byId("source-status").textContent = cause instanceof Error ? cause.message : "Unable to read selected source log.";
       }
     };
     sourceFile.onchange = (event) => {
-      void inspectFile(event.target.files?.[0]);
+      const files = Array.from(event.target.files ?? []);
+      if (workspace.refresh) {
+        void workspaceImports.get(doc)?.(files).then(() => {
+          sourceFile.value = "";
+          return inspectFile(sourceSelection ? workspace.sources.get(sourceSelection.sessionId) : void 0);
+        });
+      } else void inspectFile(files[0]);
     };
     byId("source-close").onclick = () => {
       sourcePanel.hidden = true;
@@ -593,6 +726,10 @@ ${p.arguments ?? p.input ?? ""}`);
         return;
       }
       line(box, "h3", session.id);
+      if (["claude_code", "codex"].includes(session.agent)) {
+        line(box, "p", hasSource(session) ? "Log attached" : "Log missing", "source-availability");
+        if (!hasSource(session)) sourceHelp(box, session);
+      } else line(box, "p", "Source inspection unavailable for this agent.", "muted");
       line(box, "p", `${session.agent} \xB7 ${session.agent_version || "Version unavailable"}`, "muted");
       line(box, "p", `${session.started_at || "Start unavailable"} \u2192 ${session.ended_at || "End unavailable"}`);
       line(box, "p", `Parent: ${session.parent_id || "None reported"} \xB7 Relationship: ${session.relationship || "Unavailable"}`);
@@ -618,6 +755,7 @@ ${p.arguments ?? p.input ?? ""}`);
         body.append(tr);
         const first = line(tr, "td");
         const button = line(first, "button", `${session.id} \xB7 ${session.agent}`, "session-link");
+        line(first, "small", ["claude_code", "codex"].includes(session.agent) ? hasSource(session) ? "Log attached" : "Log missing" : "Source inspection unavailable", "source-availability");
         button.setAttribute("type", "button");
         button.addEventListener("click", () => {
           selected = session.id;
@@ -670,10 +808,14 @@ ${p.arguments ?? p.input ?? ""}`);
               });
               sourceSelection = { sessionId: e.session_id, targets };
               sourcePanel.hidden = false;
+              sourceUpload.hidden = false;
+              const help = clear("source-help");
+              help.hidden = false;
+              sourceHelp(help, session);
               clear("source-view");
               byId("source-status").textContent = `Choose the matching ${session.agent === "codex" ? "Codex rollout" : "Claude Code"} JSONL for ${e.session_id} to inspect ${targets.map((item) => item.source_ref).join(" and ")}. The report does not contain the raw log.`;
               sourcePanel.scrollIntoView?.({ block: "start" });
-              void inspectFile(report === demoReport ? new File([demo_source_default], "codex-pages-session.jsonl") : sourceFile.files?.[0]);
+              void inspectFile(workspace.sources.get(e.session_id) ?? (report === demoReport ? new File([demo_source_default], "codex-pages-session.jsonl") : void 0));
             });
           }
         });
@@ -761,10 +903,21 @@ ${p.arguments ?? p.input ?? ""}`);
     const notes = clear("analysis-notes");
     line(notes, "p", `Analysis: ${report.analysis_usage.mode} \xB7 model tokens: ${formatNumber(report.analysis_usage.model_tokens)}`);
     report.analysis_usage.notes.forEach((note) => line(notes, "p", note));
-    byId("agent-filter").addEventListener("change", paintScope);
+    byId("agent-filter").onchange = paintScope;
+    workspace.sourcesChanged = () => {
+      if (reportGenerations.get(doc) !== generation) return;
+      paintScope();
+      if (sourceSelection) {
+        const session = report.sessions.find((item) => item.id === sourceSelection?.sessionId);
+        const help = clear("source-help");
+        if (session) sourceHelp(help, session);
+      }
+      if (sourceSelection && !sourcePanel.hidden) void inspectFile(workspace.sources.get(sourceSelection.sessionId));
+    };
     paintScope();
     return report;
   }
+  var workspaceImports = /* @__PURE__ */ new WeakMap();
   function bootstrap(doc = root?.document) {
     if (!doc) return;
     for (const [id, mime, content] of [["demo-report-download", "application/json", JSON.stringify(codex_pages_report_default, null, 2) + "\n"], ["demo-session-download", "application/x-ndjson", demo_source_default]]) {
@@ -779,40 +932,175 @@ ${p.arguments ?? p.input ?? ""}`);
       get("import-error").textContent = message;
       get("import-error").hidden = false;
     };
-    const load = (text) => {
-      try {
-        renderReport(parseReport(text), doc);
-      } catch (cause) {
-        error(cause instanceof Error ? cause.message : "Unable to open report.");
-      }
+    const workspace = workspaceFor(doc);
+    const selector = get("platform-select");
+    selector.value = currentPlatform(doc);
+    const updateGuide = () => {
+      const guide = get("session-path-guide");
+      guide.replaceChildren();
+      pathGuide(doc, guide);
     };
-    const embedded = get("embedded-report");
-    if (embedded && embedded.textContent.trim()) load(embedded.textContent);
-    get("clear-button").addEventListener("click", () => {
+    selector.onchange = () => {
+      if (["mac", "windows", "linux", "unknown"].includes(selector.value)) platformChoices.set(doc, selector.value);
+      updateGuide();
+      workspace.sourcesChanged?.();
+    };
+    updateGuide();
+    const hideReport = () => {
+      reportGenerations.set(doc, (reportGenerations.get(doc) ?? 0) + 1);
       get("report-view").hidden = true;
       get("empty-state").hidden = false;
-      get("import-error").hidden = true;
-      get("import-error").textContent = "";
-      get("agent-filter").value = "all";
-      get("report-file").value = "";
-      get("source-file").value = "";
       get("source-view").replaceChildren();
       get("source-inspector").hidden = true;
-    });
-    const readFile = async (file) => {
-      if (!file) return;
+      get("source-file").value = "";
+      workspace.sourcesChanged = void 0;
+    };
+    const activate = (id) => {
+      const entry = workspace.reports.find((item) => item.id === id);
+      if (!entry) return;
+      workspace.active = id;
+      get("agent-filter").value = "all";
+      renderReport(entry.report, doc);
+      refresh();
+    };
+    const removeReport = (id) => {
+      workspace.reports = workspace.reports.filter((item) => item.id !== id);
+      if (workspace.active === id) {
+        workspace.active = null;
+        if (workspace.reports.length) activate(workspace.reports[0].id);
+        else hideReport();
+      }
+      refresh();
+    };
+    const refresh = () => {
+      get("workspace-files").hidden = workspace.reports.length + workspace.sources.size === 0;
+      get("workspace-count").textContent = `(${workspace.reports.length} reports \xB7 ${workspace.sources.size} session logs)`;
+      const list2 = get("workspace-list");
+      list2.replaceChildren();
+      const row = (name, description, remove, open, active = false) => {
+        const item = doc.createElement("div");
+        item.className = "workspace-file";
+        const title = doc.createElement(open ? "button" : "span");
+        title.textContent = name;
+        title.className = "workspace-file-name";
+        if (open) {
+          title.setAttribute("type", "button");
+          title.setAttribute("aria-pressed", String(active));
+          title.onclick = open;
+        }
+        const detail = doc.createElement("span");
+        detail.className = "muted";
+        detail.textContent = description;
+        const button = doc.createElement("button");
+        button.textContent = "Remove";
+        button.setAttribute("type", "button");
+        button.setAttribute("aria-label", `Remove ${name}`);
+        button.onclick = remove;
+        item.append(title, detail, button);
+        list2.append(item);
+      };
+      workspace.reports.forEach((entry) => row(entry.name, `${entry.report.sessions.length} sessions${entry.id === workspace.active ? " \xB7 Active report" : ""}`, () => removeReport(entry.id), () => activate(entry.id), entry.id === workspace.active));
+      workspace.sources.forEach((source) => row(source.name, source.sessionId, () => {
+        workspace.sources.delete(source.sessionId);
+        get("source-close").click?.();
+        get("source-view").replaceChildren();
+        get("source-inspector").hidden = true;
+        refresh();
+        workspace.sourcesChanged?.();
+      }));
+    };
+    workspace.refresh = refresh;
+    const addReport = (report, name) => {
+      const existing = workspace.reports.find((entry) => entry.name === name && JSON.stringify(entry.report) === JSON.stringify(report));
+      if (existing) return existing.id;
+      const id = ++workspace.nextId;
+      workspace.reports.push({ id, name, report });
+      return id;
+    };
+    let importQueue = Promise.resolve();
+    const readFiles = (files, folder = false) => {
+      const epoch = workspace.epoch;
+      importQueue = importQueue.then(async () => {
+        const errors = [];
+        let firstReport;
+        const wanted = new Set(workspace.reports.flatMap((entry) => entry.report.sessions.map((session) => session.id)));
+        if (folder && !wanted.size) {
+          error("Open a report before choosing a session folder.");
+          return;
+        }
+        let matched = 0, ignored = 0, unreadable = 0;
+        const attached = /* @__PURE__ */ new Set();
+        get("import-status").textContent = folder ? "Matching session logs\u2026" : "";
+        for (const file of files) {
+          if (workspace.epoch !== epoch) return;
+          if (folder && !/\.jsonl$/i.test(file.name ?? "")) {
+            ignored++;
+            continue;
+          }
+          try {
+            if (file.size > MAX_FILE_BYTES) throw new Error("File exceeds the 20 MiB import limit.");
+            const text = await file.text();
+            if (workspace.epoch !== epoch) return;
+            if (/\.jsonl$/i.test(file.name ?? "")) {
+              if (new TextEncoder().encode(text).length > MAX_FILE_BYTES) throw new Error("File exceeds the 20 MiB import limit.");
+              const sessionId = sourceSessionId(text);
+              if (folder && (!wanted.has(sessionId) || attached.has(sessionId))) {
+                ignored++;
+                continue;
+              }
+              attached.add(sessionId);
+              matched++;
+              workspace.sources.set(sessionId, { name: file.name, text, size: file.size, sessionId });
+            } else {
+              const id = addReport(parseReport(text, file.size), file.name || "Report");
+              firstReport ??= id;
+            }
+          } catch (cause) {
+            if (folder) unreadable++;
+            else errors.push(`${file.name || "File"}: ${cause instanceof Error ? cause.message : "Unable to read file."}`);
+          }
+        }
+        if (firstReport !== void 0) activate(firstReport);
+        refresh();
+        workspace.sourcesChanged?.();
+        get("import-error").hidden = !errors.length;
+        if (folder) get("import-status").textContent = `Attached ${matched} matching log(s). ${ignored} unrelated / duplicate file(s) ignored; ${unreadable} invalid or oversized file(s) skipped.`;
+        if (errors.length) error(errors.join("\n"));
+      });
+      return importQueue;
+    };
+    workspaceImports.set(doc, readFiles);
+    const embedded = get("embedded-report");
+    if (embedded.textContent.trim()) {
       try {
-        if (file.size > MAX_FILE_BYTES) throw new Error("Report exceeds the 20 MiB import limit.");
-        const text = await file.text();
-        renderReport(parseReport(text, file.size), doc);
-        get("agent-filter").value = "all";
-        get("agent-filter").dispatchEvent(new Event("change"));
+        activate(addReport(parseReport(embedded.textContent), "Embedded report"));
       } catch (cause) {
         error(cause instanceof Error ? cause.message : "Unable to open report.");
       }
-    };
+    }
+    get("clear-button").addEventListener("click", () => {
+      if (workspace.active !== null) removeReport(workspace.active);
+    });
+    get("workspace-clear").addEventListener("click", () => {
+      workspace.epoch++;
+      workspace.reports = [];
+      workspace.sources.clear();
+      workspace.active = null;
+      hideReport();
+      refresh();
+      get("import-error").hidden = true;
+      get("import-status").textContent = "";
+      get("report-file").value = "";
+    });
     get("report-file").addEventListener("change", (event) => {
-      void readFile(event.target.files?.[0]);
+      const input = event.target;
+      void readFiles(Array.from(input.files ?? []));
+      input.value = "";
+    });
+    get("session-folder").addEventListener("change", (event) => {
+      const input = event.target;
+      void readFiles(Array.from(input.files ?? []), true);
+      input.value = "";
     });
     const zone = get("drop-zone");
     zone.addEventListener("dragover", (event) => {
@@ -823,14 +1111,14 @@ ${p.arguments ?? p.input ?? ""}`);
     zone.addEventListener("drop", (event) => {
       event.preventDefault();
       zone.classList.remove("dragover");
-      void readFile(event.dataTransfer?.files?.[0]);
+      void readFiles(Array.from(event.dataTransfer?.files ?? []));
     });
     get("demo-button").addEventListener("click", () => {
-      get("agent-filter").value = "all";
-      renderReport(demoReport, doc);
+      activate(addReport(demoReport, "Real session demo"));
     });
+    refresh();
   }
-  var api = { validateReport, parseReport, inspectClaudeLog, inspectCodexLog, selectScope, formatNumber, renderReport, bootstrap, MAX_FILE_BYTES };
+  var api = { validateReport, parseReport, inspectClaudeLog, inspectCodexLog, selectScope, formatNumber, renderReport, bootstrap, detectPlatform, MAX_FILE_BYTES };
   if (root) {
     root.SessionAnalysis = api;
     if (root.document) {

@@ -3,6 +3,11 @@ import type {NormalizedEvent, NormalizedSession, Report, ReportSession, Finding,
 import {validateReport} from './validation.js';
 
 function canonical(value:unknown):string {return JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v)??'null';}
+function comparison(e:NormalizedEvent):unknown {
+  if(e.comparison_arguments!==undefined) return e.comparison_arguments;
+  if(typeof e.arguments==='string') {try {const value:unknown=JSON.parse(e.arguments);if(value&&typeof value==='object'&&!Array.isArray(value)) return value;}catch {}}
+  return e.arguments??null;
+}
 function digest(value:unknown):string {return createHash('sha256').update(canonical(value)).digest('hex').slice(0,20);}
 function sourceRef(e:NormalizedEvent):string {return /^(?:line|message|event|row):[A-Za-z0-9_.:-]{1,128}$/.test(e.source_ref)?e.source_ref:'event:'+digest(e.id);}
 function redact(text:string):string {return text.replace(/https?:\/\/\S+/g,'[URL]').replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[EMAIL]').replace(/(?<!\w)(?:\/[^\s/]+){2,}/g,'[PATH]').replace(/\b[A-Za-z]:\\(?:[^\\\s]+\\)+[^\\\s]+/g,'[PATH]').replace(/\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{12,}/g,'[TOKEN]');}
@@ -50,7 +55,7 @@ export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Repo
         if(state==='loaded'){item.loads++;target.metrics.skill_load_count++;const group=skillGroups.get(name)??[];group.push(e);skillGroups.set(name,group);}}
       if(e.type==='tool_call') {const name=e.tool_name||'unknown';let item=tools.get(name);if(!item){item={name,calls:0,errors:0,output_chars:0};tools.set(name,item);}item.calls++;
         if(e.call_id){const group=calls.get(e.call_id)??[];group.push(e);calls.set(e.call_id,group);}
-        const key=canonical([name,digest(e.arguments??null)]),group=groups.get(key)??[];group.push(e);groups.set(key,group);}
+        const key=canonical([name,digest(comparison(e))]),group=groups.get(key)??[];group.push(e);groups.set(key,group);}
     }
     const failed=new Set<string>(),linkedResults=new Map<string,NormalizedEvent[]>();
     for(const e of s.events) {if(e.type!=='tool_result') continue;
@@ -64,7 +69,7 @@ export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Repo
     }
     target.metrics.tool_error_count=failed.size;
     const covered=new Set<string>();
-    const callKey=(e:NormalizedEvent)=>canonical([e.tool_name,e.arguments??null]);
+    const callKey=(e:NormalizedEvent)=>canonical([e.tool_name,comparison(e)]);
     let pending:NormalizedEvent|null=null,episode:NormalizedEvent[]=[],episodeKey='',errorText='';
     function finish(recovery:NormalizedEvent[]=[]):void {
       if(episode.length>=4||(episode.length===2&&recovery.length)) {

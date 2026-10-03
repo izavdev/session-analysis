@@ -165,7 +165,7 @@ test('Hermes historical role-message JSONL requires explicit selection', () => t
   assert.throws(()=>loadSessions(path),/schema|mismatch/i);
   const [s]=loadSessions(path,'hermes');
   assert.equal(s.coverage.usage,'unavailable'); assert.equal(s.usage.total_tokens,null);
-  assert.equal(s.events.find(e=>e.type==='skill')?.skill_state,'loaded');
+  assert.equal(s.events.find(e=>e.type==='skill')?.skill_state,'invoked');
 }));
 
 test('malformed final JSONL is warned, malformed interior and initial lines rejected without private text', () => temp(dir => {
@@ -225,4 +225,29 @@ test('discover checks names only, root override, filters and environment overrid
   const old=process.env.CODEX_HOME; process.env.CODEX_HOME=join(dir,'.codex');
   try { assert.equal(discover('codex').some(x=>x.path===paths[1]),true); }
   finally { if(old===undefined) delete process.env.CODEX_HOME; else process.env.CODEX_HOME=old; }
+}));
+
+test('skill invocation counts as a load only after a unique explicit successful result',()=>temp(dir=>{
+  for(const status of [true,false,null,'missing','ambiguous']) {
+    const path=join(dir,'skill.jsonl');
+    const rows=[{type:'assistant',sessionId:'skill',uuid:'a',message:{content:[{type:'tool_use',id:'read',name:'Read',input:{file_path:'skills/example/SKILL.md'}}]}}];
+    if(status!=='missing') rows.push({type:'user',sessionId:'skill',uuid:'b',message:{content:[{type:'tool_result',tool_use_id:'read',is_error:status==='ambiguous'?false:status,content:'contents'}]}});
+    if(status==='ambiguous') rows.push({type:'user',sessionId:'skill',uuid:'c',message:{content:[{type:'tool_result',tool_use_id:'read',is_error:false,content:'other'}]}});
+    jsonl(path,rows);const [s]=loadSessions(path);const skills=s.events.filter(e=>e.type==='skill');
+    assert.equal(skills[0].skill_state,'invoked');assert.equal(skills.filter(e=>e.skill_state==='loaded').length,status===false?1:0);
+    assert.ok(!skills.some(e=>e.skill_state==='applied'));
+  }
+}));
+test('rollout structured status is explicit, prose status unknown; raw arguments preserved',()=>temp(dir=>{
+  const path=join(dir,'rollout.jsonl');
+  jsonl(path,[{type:'session_meta',payload:{id:'s'}},
+    {type:'response_item',payload:{type:'function_call',call_id:'1',name:'read_file',arguments:'{ "path": "skills/demo/SKILL.md", "offset": 1 }'}},
+    {type:'response_item',payload:{type:'function_call_output',call_id:'1',output:'{"exit_code":0,"output":"contents"}'}},
+    {type:'response_item',payload:{type:'function_call',call_id:'2',name:'read_file',arguments:'{"offset":1,"path":"skills/demo/SKILL.md"}'}},
+    {type:'response_item',payload:{type:'function_call_output',call_id:'2',output:'Error: command failed'}},
+  ]);
+  const [s]=loadSessions(path);assert.equal(s.coverage.observations.errors,'partial');
+  const calls=s.events.filter(e=>e.type==='tool_call');assert.notEqual(calls[0].arguments,calls[1].arguments);assert.deepEqual(calls[0].comparison_arguments,calls[1].comparison_arguments);
+  assert.deepEqual(s.events.filter(e=>e.type==='tool_result').map(e=>e.is_error),[false,null]);
+  assert.equal(s.events.filter(e=>e.skill_state==='loaded').length,1);
 }));

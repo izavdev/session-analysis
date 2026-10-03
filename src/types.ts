@@ -20,6 +20,7 @@ export interface NormalizedEvent {
   tool_name?: string;
   call_id?: string;
   arguments?: unknown;
+  comparison_arguments?: unknown;
   is_error?: boolean | null;
   skill_name?: string;
   skill_state?: 'invoked' | 'loaded' | 'applied' | 'unknown';
@@ -39,7 +40,7 @@ export interface NormalizedSession {
   relationship: string | null;
   events: NormalizedEvent[];
   usage: Usage;
-  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]};
+  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]; observations?: {errors: UsageCoverage; skill_loads: UsageCoverage; usage_granularity: 'request' | 'session' | 'unavailable'; source_context: boolean}};
 }
 
 export interface ReportSession {

@@ -43,7 +43,7 @@ interface NormalizedSession {
   relationship: string | null;
   events: NormalizedEvent[];
   usage: Usage;
-  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]};
+  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]; observations?: {errors: UsageCoverage; skill_loads: UsageCoverage; usage_granularity: string; source_context: boolean}};
 }
 
 interface ReportSession {
@@ -539,7 +539,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       line(box,'p',`Parent: ${session.parent_id || 'None reported'} · Relationship: ${session.relationship || 'Unavailable'}`);
       line(box,'p',`Usage: ${session.coverage.usage}; tools: ${session.coverage.tools}; input ${formatNumber(session.usage.input_tokens)}, output ${formatNumber(session.usage.output_tokens)}, total ${formatNumber(session.usage.total_tokens)}`);
       line(box,'p',`Cache read ${formatNumber(session.usage.cache_read_tokens)} · cache write ${formatNumber(session.usage.cache_write_tokens)} · reasoning ${formatNumber(session.usage.reasoning_tokens)}`);
-      line(box,'p',`Calls ${session.metrics.tool_call_count} · errors ${session.metrics.tool_error_count} · skill loads ${session.metrics.skill_load_count} · events ${session.metrics.event_count}`);
+      line(box,'p',`Calls ${session.metrics.tool_call_count} · observed errors ${session.metrics.tool_error_count} (${session.coverage.observations?.errors??'coverage unknown'}) · confirmed skill loads ${session.metrics.skill_load_count} (${session.coverage.observations?.skill_loads??'coverage unknown'}) · events ${session.metrics.event_count}`);
       session.coverage.limitations.forEach(item=>line(box,'p',`Limitation: ${item}`,'muted'));
       line(box,'h4','Models observed');
       const models=new Set(session.model_runs.filter(run=>run.model).map(run=>`${run.provider || 'Provider unavailable'} / ${run.model}`));
@@ -563,7 +563,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
         line(tr,'td',session.coverage.usage);
         line(tr,'td',formatNumber(session.usage.total_tokens),'numeric');
         line(tr,'td',formatNumber(session.metrics.tool_call_count),'numeric');
-        line(tr,'td',formatNumber(session.metrics.tool_error_count),'numeric');
+        line(tr,'td',formatNumber(session.metrics.tool_error_count)+' observed ('+(session.coverage.observations?.errors??'coverage unknown')+')','numeric');
       });
       byId('no-sessions').hidden=filtered.sessions.length!==0;
       paintInspector(filtered.sessions.find(session=>session.id===selected));
@@ -675,8 +675,8 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       const tbody=line(t,'tbody');
       data.forEach(row=>{const tr=line(tbody,'tr');values(row).forEach(val=>line(tr,'td',val));});
     }
-    table('tools',['Tool','Calls','Errors','Output characters'],report.metrics.tools,t=>[t.name,formatNumber(t.calls),formatNumber(t.errors),formatNumber(t.output_chars)]);
-    table('skills',['Skill','Loads','States'],report.metrics.skills,s=>[s.name,formatNumber(s.loads),s.states.join(', ') || 'Unknown']);
+    table('tools',['Tool','Calls','Observed errors (may be partial)','Output characters'],report.metrics.tools,t=>[t.name,formatNumber(t.calls),formatNumber(t.errors),formatNumber(t.output_chars)]);
+    table('skills',['Skill','Confirmed loads (may be partial)','States'],report.metrics.skills,s=>[s.name,formatNumber(s.loads),s.states.join(', ') || 'Unknown']);
     const notes=clear('analysis-notes');
     line(notes,'p',`Analysis: ${report.analysis_usage.mode} · model tokens: ${formatNumber(report.analysis_usage.model_tokens)}`);
     report.analysis_usage.notes.forEach(note=>line(notes,'p',note));

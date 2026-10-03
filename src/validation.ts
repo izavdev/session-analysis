@@ -44,7 +44,8 @@ export function validateReport(value:unknown):asserts value is Report {
     const s=obj(x,['id','agent','agent_version','started_at','ended_at','parent_id','relationship','usage','coverage','metrics','model_runs','timeline'],'session');
     str(s.id,'session.id');en(s.agent,['codex','claude_code','hermes'],'session.agent');
     for(const k of ['agent_version','started_at','ended_at','parent_id','relationship']) nullable(s[k],str,'session.'+k);
-    usage(s.usage,'session.usage');const c=obj(s.coverage,['usage','tools','limitations'],'session.coverage');
+    usage(s.usage,'session.usage');const fields=['usage','tools','limitations'];if(s.coverage&&typeof s.coverage==='object'&&Object.hasOwn(s.coverage,'observations')) fields.push('observations');const c=obj(s.coverage,fields,'session.coverage');
+    if(c.observations!==undefined){const o=obj(c.observations,['errors','skill_loads','usage_granularity','source_context'],'observations');en(o.errors,coverage,'observations.errors');en(o.skill_loads,coverage,'observations.skill_loads');en(o.usage_granularity,['request','session','unavailable'],'observations.usage_granularity');if(typeof o.source_context!=='boolean') fail('observations.source_context');}
     en(c.usage,coverage,'session.coverage.usage');en(c.tools,['observed','unavailable'],'session.coverage.tools');strings(c.limitations,'session.coverage.limitations');
     const m=obj(s.metrics,['tool_call_count','tool_error_count','skill_load_count','event_count'],'session.metrics');for(const k of Object.keys(m)) count(m[k],'session.metrics.'+k);
     for(const x of arr(s.model_runs,'model_runs')) {const run=obj(x,['model','provider'],'model_run');nullable(run.model,str,'model_run.model');nullable(run.provider,str,'model_run.provider');}

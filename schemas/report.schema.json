@@ -447,6 +447,42 @@
           "items": {
             "type": "string"
           }
+        },
+        "observations": {
+          "type": "object",
+          "required": [
+            "errors",
+            "skill_loads",
+            "usage_granularity",
+            "source_context"
+          ],
+          "properties": {
+            "errors": {
+              "enum": [
+                "reported",
+                "partial",
+                "unavailable"
+              ]
+            },
+            "skill_loads": {
+              "enum": [
+                "reported",
+                "partial",
+                "unavailable"
+              ]
+            },
+            "usage_granularity": {
+              "enum": [
+                "request",
+                "session",
+                "unavailable"
+              ]
+            },
+            "source_context": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

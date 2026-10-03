@@ -241,3 +241,14 @@ test('manual merge accepts only evidenced inferred additions without mutating or
   validateReport(merged);
   for(const bad of [{summary:{total_tokens:999}},{evidence:[{id:'invented'}]},{findings:[{...f,id:'finding:fake',evidence_ids:['invented']}]},{findings:[{...f,id:'finding:fake',claim_type:'observed'}]}]) assert.throws(()=>mergeInterpretation(r,bad));
 });
+test('structured JSON arguments compare canonically while shell strings remain distinct',()=>{
+  const r=analyze([session('json',[
+    event('a','tool_call','',{tool_name:'read_file',arguments:'{"path":"a","offset":1}'}),
+    event('b','tool_call','',{tool_name:'read_file',arguments:'{ "offset": 1, "path": "a" }'}),
+    event('c','tool_call','',{tool_name:'read_file',arguments:'{"path":"b","offset":1}'}),
+    event('d','tool_call','',{tool_name:'shell',arguments:'echo a'}),
+    event('e','tool_call','',{tool_name:'shell',arguments:'echo  a'}),
+  ])]);
+  assert.equal(r.findings.filter(f=>f.rule_id==='repeated_tool_call').length,1);
+  assert.equal(r.findings[0].evidence_ids.length,2);
+});

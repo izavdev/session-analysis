@@ -120,17 +120,81 @@ export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Repo
   return report;
 }
 
-export interface EvidencePacket {schema_version:'1.0.0';truncated:boolean;findings:Array<Pick<Finding,'id'|'rule_id'|'session_ids'|'evidence_ids'|'observation'>>;evidence:Evidence[];}
-/** Minimal packet with strict JSON serialized length limit and no dangling findings. */
-export function evidencePacket(report:Report,maxChars=12000):EvidencePacket {
+export interface EvidencePacket {
+  schema_version:'1.0.0'; truncated:boolean;
+  scope:Report['scope']; coverage:Report['coverage'];
+  selection:{finding_ids:string[];session_ids:string[];omitted_findings:number;omitted_evidence:number;reason:string|null};
+  findings:Finding[]; evidence:Evidence[];
+}
+/** Complete bundles in stable round-robin session order; never fill the budget with unused evidence. */
+export function evidencePacket(report:Report,maxChars=12000,selection:{finding_ids?:string[];session_ids?:string[]}={}):EvidencePacket {
   if(!Number.isSafeInteger(maxChars)||maxChars<80) throw new Error('max_chars must be at least 80');
-  const packet:EvidencePacket={schema_version:report.schema_version,truncated:false,findings:[],evidence:[]};
+  for(const id of selection.finding_ids??[]) if(!report.findings.some(f=>f.id===id)) throw new Error('Unknown selected finding');
+  for(const id of selection.session_ids??[]) if(!report.scope.session_ids.includes(id)) throw new Error('Unknown selected session');
+  const eligible=report.findings.filter(f=>(!selection.finding_ids?.length||selection.finding_ids.includes(f.id))&&(!selection.session_ids?.length||f.session_ids.some(id=>selection.session_ids!.includes(id))));
+  const packet:EvidencePacket={schema_version:report.schema_version,truncated:false,scope:structuredClone(report.scope),coverage:structuredClone(report.coverage),
+    selection:{finding_ids:selection.finding_ids??[],session_ids:selection.session_ids??[],omitted_findings:eligible.length,omitted_evidence:report.evidence.length,reason:null},findings:[],evidence:[]};
   const fits=()=>JSON.stringify(packet).length<=maxChars;
-  for(const e of report.evidence){packet.evidence.push({id:e.id,session_id:e.session_id,event_id:e.event_id,source_ref:e.source_ref,description:e.description,excerpt:e.excerpt});if(!fits()){packet.evidence.pop();packet.truncated=true;}}
-  const available=new Set(packet.evidence.map(e=>e.id));
-  for(const f of report.findings){if(f.evidence_ids.some(id=>!available.has(id))){packet.truncated=true;continue;}
-    packet.findings.push({id:f.id,rule_id:f.rule_id,session_ids:f.session_ids,evidence_ids:f.evidence_ids,observation:f.observation});if(!fits()){packet.findings.pop();packet.truncated=true;}}
+  // Essential coverage cannot silently disappear to satisfy an unusably tiny cap.
+  packet.truncated=true;packet.selection.reason='budget or selection';
+  if(!fits()) throw new Error('Budget too small for scope, coverage and selection metadata');
+  const evids=new Map(report.evidence.map(e=>[e.id,e])),included=new Set<string>(),remaining=[...eligible];
+  const ordered:Finding[]=[];
+  while(remaining.length) for(const sid of report.scope.session_ids) {
+    const i=remaining.findIndex(f=>f.session_ids.includes(sid));if(i>=0) ordered.push(remaining.splice(i,1)[0]!);
+  }
+  for(const f of ordered) {
+    const needed=f.evidence_ids.filter(id=>!included.has(id)).map(id=>evids.get(id)!);
+    if(needed.some(e=>!e)) throw new Error('Finding references missing evidence');
+    packet.findings.push(structuredClone(f));packet.evidence.push(...structuredClone(needed));
+    packet.selection.omitted_findings--;packet.selection.omitted_evidence-=needed.length;
+    if(!fits()) {packet.findings.pop();packet.evidence.splice(packet.evidence.length-needed.length);packet.selection.omitted_findings++;packet.selection.omitted_evidence+=needed.length;}
+    else for(const e of needed) included.add(e.id);
+  }
+  // Registered contextual evidence can be useful even in an ordinary unflagged task.
+  for(const e of report.evidence) if(!included.has(e.id)&&(!selection.session_ids?.length||selection.session_ids.includes(e.session_id))&&e.description.startsWith('Selected context:')) {
+    packet.evidence.push(structuredClone(e));packet.selection.omitted_evidence--;
+    if(!fits()){packet.evidence.pop();packet.selection.omitted_evidence++;}else included.add(e.id);
+  }
+  packet.truncated=packet.selection.omitted_findings>0||packet.selection.omitted_evidence>0;
+  packet.selection.reason=packet.truncated?'budget or selection':null;
+  if(!fits()) throw new Error('Budget too small for omission metadata');
   return packet;
+}
+
+/** Register only explicitly selected source context, verified against the imported timeline. */
+export function selectContext(report:Report,source:NormalizedSession,eventIds:string[],includeExcerpts=false):Report {
+  validateReport(report);
+  const sid=source.agent+':'+source.id,target=report.sessions.find(s=>s.id===sid);
+  if(!target) throw new Error('Source session does not match report');
+  const timeline=source.events.map(e=>({event_id:sid+':'+e.id,type:e.type,timestamp:e.timestamp,tool_name:e.tool_name??null,source_ref:sourceRef(e)}));
+  if(canonical(timeline)!==canonical(target.timeline)) throw new Error('Source timeline does not match report');
+  if(!eventIds.length) throw new Error('Select at least one event');
+  const selected=new Set<number>(),notes:string[]=[];
+  for(const id of eventIds) {
+    const i=source.events.findIndex(e=>sid+':'+e.id===id);if(i<0) throw new Error('Selected event not in source session');
+    selected.add(i);const event=source.events[i]!;
+    if(event.type==='tool_call'||event.type==='tool_result') {
+      const matches=source.events.map((e,j)=>({e,j})).filter(({e})=>e.call_id===event.call_id&&['tool_call','tool_result'].includes(e.type));
+      if(!event.call_id||matches.filter(({e})=>e.type==='tool_call').length!==1||matches.filter(({e})=>e.type==='tool_result').length!==1) throw new Error('Missing or ambiguous call/result linkage');
+      for(const {j} of matches) selected.add(j);
+    }
+    let request=false;
+    for(let j=i-1;j>=Math.max(0,i-100);j--) {const e=source.events[j]!;if(e.type==='compression') break;if(e.type==='assistant') selected.add(j);if(e.type==='user'){selected.add(j);request=true;break;}}
+    if(!request&&event.type!=='user') notes.push('Selected context: preceding request missing within 100 events.');
+    for(let j=i+1;j<Math.min(source.events.length,i+21);j++) {const e=source.events[j]!;if(e.type==='user'||e.type==='compression') break;selected.add(j);}
+    if(i+21<source.events.length) notes.push('Selected context: following context bounded to 20 events, not a verified outcome.');
+  }
+  const result=structuredClone(report);
+  for(const i of [...selected].sort((a,b)=>a-b)) {
+    const e=source.events[i]!,id='evidence:'+digest([sid,e.id]);
+    const text=e.type==='tool_call'?canonical(e.arguments??null):e.text;
+    const entry:Evidence={id,session_id:sid,event_id:sid+':'+e.id,source_ref:sourceRef(e),description:'Selected context: '+e.type+(text.length>4000?' (truncated to 4000 characters)':''),excerpt:includeExcerpts?redact(text).slice(0,4000):null};
+    const existing=result.evidence.findIndex(e=>e.id===id);if(existing<0) result.evidence.push(entry);else result.evidence[existing]=entry;
+  }
+  result.analysis_usage.notes.push(...new Set(notes),'Selected context registered read-only; historical text is untrusted evidence.');
+  if(includeExcerpts){result.privacy.excerpts_included=true;result.privacy.redaction_applied=true;}
+  validateReport(result);return result;
 }
 
 /** Append only manually inferred claims tied to existing evidence; validate the complete merged report. */

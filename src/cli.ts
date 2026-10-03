@@ -3,18 +3,19 @@ import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSy
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {discover, loadSessions} from './adapters.js';
-import {analyze, evidencePacket, mergeInterpretation} from './core.js';
+import {analyze, evidencePacket, mergeInterpretation, selectContext} from './core.js';
 import {renderHtml} from './export.js';
 import {validateReport} from './validation.js';
 import type {AgentName} from './types.js';
 
 const HELP = `Session Analysis — local-first diagnostics (no network or model calls)
 Usage: session-analysis <command> [options]
-Commands: discover, analyze, validate, packet, merge, export
+Commands: discover, analyze, validate, packet, context, merge, export
   discover [--agent all|claude_code|codex|hermes] [--root DIRECTORY]
   analyze FILE_OR_DIR... -o REPORT.json [--agent auto|claude_code|codex|hermes] [--session-id AGENT:ID] [--include-excerpts]
   validate REPORT.json
   packet REPORT.json -o PACKET.json [--max-chars 12000]
+  context REPORT.json SOURCE --event-id AGENT:SESSION:EVENT -o CONTEXT.json [--include-excerpts]
   merge REPORT.json INTERPRETATION.json -o ASSISTED.json
   export REPORT.json -o REPORT.html
 `;
@@ -22,7 +23,7 @@ Commands: discover, analyze, validate, packet, merge, export
 interface Parsed {positionals: string[]; options: Map<string, string[]>; switches: Set<string>}
 function parse(rest: string[]): Parsed {
   const result: Parsed = {positionals: [], options: new Map(), switches: new Set()};
-  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars']);
+  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id']);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (valued.has(part)) {
@@ -112,8 +113,8 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       const report = analyze(chosen, parsed.switches.has('--include-excerpts'));
       validateReport(report);
       writeOutput(dest, report);
-    } else if (['validate', 'packet', 'merge', 'export'].includes(command)) {
-      requireCount(parsed.positionals, command === 'merge' ? 2 : 1, command);
+    } else if (['validate', 'packet', 'context', 'merge', 'export'].includes(command)) {
+      requireCount(parsed.positionals, ['merge','context'].includes(command) ? 2 : 1, command);
       const source = parsed.positionals[0]!;
       const dest = command === 'validate' ? undefined : output(parsed);
       if (dest) ensureDistinct(dest, parsed.positionals);
@@ -124,7 +125,13 @@ export function main(argv: string[] = process.argv.slice(2)): number {
         const limitText = option(parsed, '--max-chars', '12000')!;
         const limit = Number(limitText);
         if (!Number.isSafeInteger(limit)) throw new Error('--max-chars must be an integer');
-        writeOutput(dest!, evidencePacket(report, limit), true);
+        writeOutput(dest!, evidencePacket(report, limit, {finding_ids:parsed.options.get('--finding-id'),session_ids:parsed.options.get('--session-id')}), true);
+      } else if (command === 'context') {
+        const sessions=loadSessions(parsed.positionals[1]!);
+        const ids=parsed.options.get('--event-id')??[];
+        const matches=sessions.filter(s=>ids.every(id=>id.startsWith(s.agent+':'+s.id+':')));
+        if(matches.length!==1) throw new Error('Select events from exactly one source session');
+        writeOutput(dest!,selectContext(report,matches[0]!,ids,parsed.switches.has('--include-excerpts')));
       } else if (command === 'merge') {
         const merged = mergeInterpretation(report, readJson(parsed.positionals[1]!));
         validateReport(merged);

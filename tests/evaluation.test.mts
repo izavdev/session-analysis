@@ -23,6 +23,5 @@ test('populated packet baseline exposes lost findings without dangling reference
   const report=analyze([s]);assert.equal(report.findings.length,40);
   const packet=evidencePacket(report);assert.ok(JSON.stringify(packet).length<=12000);assert.ok(packet.truncated);
   const ids=new Set(packet.evidence.map(e=>e.id));for(const f of packet.findings) assert.ok(f.evidence_ids.every(id=>ids.has(id)));
-  // Before issue 02 the evidence-first algorithm starves all 40 findings.
-  assert.equal(packet.findings.length,0);
+  assert.ok(packet.findings.length>0);
 });

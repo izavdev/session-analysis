@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { runInNewContext } from 'node:vm';
-import { validateReport, parseReport, selectScope, formatNumber, renderReport, bootstrap, inspectClaudeLog, inspectCodexLog, MAX_FILE_BYTES } from '../src/web/app.ts';
+import { validateReport, parseReport, selectScope, formatNumber, renderReport, bootstrap, inspectClaudeLog, inspectCodexLog, detectPlatform, MAX_FILE_BYTES } from '../src/web/app.ts';
 import type { Report } from '../src/types.ts';
 
 const html = readFileSync(fileURLToPath(new URL('../web/index.html', import.meta.url)), 'utf8');
@@ -60,9 +60,9 @@ class Element {
   querySelectorAll(tag: string): Element[] { return this.children.flatMap(c=>[...(c.tagName===tag.toUpperCase()?[c]:[]),...c.querySelectorAll(tag)]); }
 }
 function documentFixture() {
-  const ids=['embedded-report','report-file','drop-zone','demo-button','clear-button','import-error','empty-state','report-view','report-label','demo-label','privacy-banner','coverage-banner','coverage-details','summary','session-count','agent-filter','sessions-body','no-sessions','inspector','finding-count','findings','activity','activity-count','suggestion-count','source-inspector','source-status','source-file','source-view','source-close','recommendations','tools','skills','candidates','analysis-notes'];
+  const ids=['platform-select','session-path-guide','source-help','session-folder','import-status','workspace-files','workspace-list','workspace-count','workspace-clear','embedded-report','report-file','drop-zone','demo-button','clear-button','import-error','empty-state','report-view','report-label','demo-label','privacy-banner','coverage-banner','coverage-details','summary','session-count','agent-filter','sessions-body','no-sessions','inspector','finding-count','findings','activity','activity-count','suggestion-count','source-inspector','source-status','source-upload','source-file','source-view','source-close','recommendations','tools','skills','candidates','analysis-notes'];
   const elements=Object.fromEntries(ids.map(id=>[id,new Element()]));
-  return {elements,getElementById:(id:string)=>elements[id] ?? null,createElement:(tag:string)=>new Element(tag)};
+  return {elements,getElementById:(id:string)=>elements[id] ?? null,createElement:(tag:string)=>new Element(tag),createTextNode:(text:string)=>{const e=new Element('text');e.textContent=text;return e;}};
 }
 function populated(): Report {
   const r=report(); const id='hermes:one';
@@ -316,4 +316,156 @@ test('local file viewer boots its compiled script and the demo button renders',(
   doc.elements['demo-button'].dispatch('click');
   assert.equal(doc.elements['report-view'].hidden,false);
   assert.equal(doc.elements['demo-label'].hidden,false);
+});
+
+const settle=()=>new Promise(resolve=>setImmediate(resolve));
+const localFile=(name:string,text:string)=>({name,size:Buffer.byteLength(text),text:async()=>text});
+test('workspace imports batches, keeps valid files after failures, and switches reports',async()=>{
+  const doc=documentFixture();bootstrap(doc as unknown as Document);
+  const second=report();second.report.id='second';
+  doc.elements['report-file'].dispatch('change',{target:{files:[localFile('first.json',JSON.stringify(populated())),localFile('broken.json','{'),localFile('second.json',JSON.stringify(second))]}});
+  await settle();
+  assert.match(doc.elements['workspace-count'].textContent,/2 reports/);
+  assert.match(doc.elements['import-error'].textContent,/broken.json.*Invalid JSON/);
+  assert.match(doc.elements['report-label'].textContent,/synthetic/);
+  const buttons=doc.elements['workspace-list'].querySelectorAll('button');
+  buttons[2]!.dispatch('click');
+  assert.match(doc.elements['report-label'].textContent,/second/);
+  buttons[0]!.dispatch('click');
+  assert.equal(doc.elements['sessions-body'].querySelectorAll('tr').length,2);
+  // Re-importing an identical file does not add another entry.
+  doc.elements['drop-zone'].dispatch('drop',{dataTransfer:{files:[localFile('second.json',JSON.stringify(second))]}});
+  await settle();assert.match(doc.elements['workspace-count'].textContent,/2 reports/);
+  doc.elements['clear-button'].dispatch('click');
+  assert.match(doc.elements['workspace-count'].textContent,/1 reports/);
+  assert.match(doc.elements['report-label'].textContent,/synthetic/);
+});
+
+test('multiple session logs are reused by identity across evidence and report switches',async()=>{
+  const doc=documentFixture();bootstrap(doc as unknown as Document);
+  const r=structuredClone(demoReport);r.report.demo=false;r.report.id='local';
+  const other=report();other.report.id='other';
+  const otherLog=demoLog.replaceAll('pages-demo','other-session').replaceAll('npm test','private other command');
+  doc.elements['drop-zone'].dispatch('drop',{dataTransfer:{files:[localFile('local.json',JSON.stringify(r)),localFile('other.json',JSON.stringify(other)),localFile('other.jsonl',otherLog),localFile('matching.jsonl',demoLog)]}});
+  await settle();
+  assert.match(doc.elements['workspace-count'].textContent,/2 reports.*2 session logs/);
+  const inspect=()=>doc.elements.findings.querySelectorAll('button')[0]!.dispatch('click');
+  inspect();await settle();
+  assert.match(doc.elements['source-status'].textContent,/matching.jsonl/);
+  assert.equal(doc.elements['source-upload'].hidden,true);
+  assert.match(doc.elements['source-view'].textContent,/npm test/);
+  assert.doesNotMatch(doc.elements['source-view'].textContent,/private other command/);
+  doc.elements['source-close'].dispatch('click');inspect();await settle();
+  assert.match(doc.elements['source-view'].textContent,/npm test/);
+  let buttons=doc.elements['workspace-list'].querySelectorAll('button');
+  buttons[2]!.dispatch('click');buttons=doc.elements['workspace-list'].querySelectorAll('button');buttons[0]!.dispatch('click');
+  inspect();await settle();assert.match(doc.elements['source-view'].textContent,/npm test/);
+  // Remove the matching source; reopening must request a file again.
+  doc.elements['workspace-list'].querySelectorAll('button').at(-1)!.dispatch('click');
+  inspect();await settle();assert.equal(doc.elements['source-view'].textContent,'');
+  assert.match(doc.elements['source-status'].textContent,/Choose the matching/);
+  assert.equal(doc.elements['source-upload'].hidden,false);
+  doc.elements['workspace-clear'].dispatch('click');
+  assert.equal(doc.elements['workspace-files'].hidden,true);
+  assert.equal(doc.elements['report-view'].hidden,true);
+});
+
+test('workspace clear cancels pending imports and invalid logs do not enter the workspace',async()=>{
+  const doc=documentFixture();bootstrap(doc as unknown as Document);
+  let finish!:(text:string)=>void;
+  doc.elements['report-file'].dispatch('change',{target:{files:[{name:'pending.json',size:100,text:()=>new Promise<string>(resolve=>{finish=resolve;})}]}});
+  await settle();doc.elements['workspace-clear'].dispatch('click');finish(JSON.stringify(report()));await settle();
+  assert.equal(doc.elements['workspace-files'].hidden,true);
+  assert.equal(doc.elements['report-view'].hidden,true);
+  doc.elements['report-file'].dispatch('change',{target:{files:[localFile('bad.jsonl','{}\nnot json'),localFile('unknown.jsonl','{}')]}});
+  await settle();assert.match(doc.elements['import-error'].textContent,/Invalid session JSONL.*one session identity/s);
+  assert.equal(doc.elements['workspace-files'].hidden,true);
+});
+
+test('folder selection matches identities across subfolders, ignores unrelated files, and updates source status',async()=>{
+  const doc=documentFixture();bootstrap(doc as unknown as Document);
+  const r=structuredClone(demoReport);r.report.demo=false;
+  doc.elements['report-file'].dispatch('change',{target:{files:[localFile('report.json',JSON.stringify(r))]}});
+  await settle();assert.match(doc.elements['sessions-body'].textContent,/Log missing/);
+  doc.elements.findings.querySelectorAll('button')[0]!.dispatch('click');
+  assert.equal(doc.elements['source-help'].hidden,false);
+  assert.match(doc.elements['source-help'].textContent,/pages-demo.*~\/.codex\/sessions/s);
+  let ignoredReads=0;
+  const matching={...localFile('renamed.jsonl',demoLog),webkitRelativePath:'logs/date/renamed.jsonl'};
+  doc.elements['session-folder'].dispatch('change',{target:{files:[
+    matching,localFile('unrelated.jsonl',demoLog.replaceAll('pages-demo','unrelated')),
+    localFile('duplicate.jsonl',demoLog),localFile('invalid.jsonl','not json'),
+    {name:'report.json',size:100,text:async()=>{ignoredReads++;return JSON.stringify(r);}},
+    {name:'oversized.jsonl',size:MAX_FILE_BYTES+1,text:async()=>{ignoredReads++;return demoLog;}}
+  ]}});
+  await settle();
+  assert.equal(ignoredReads,0);
+  assert.match(doc.elements['workspace-count'].textContent,/1 reports.*1 session logs/);
+  assert.match(doc.elements['import-status'].textContent,/Attached 1.*3 unrelated.*2 invalid/);
+  assert.match(doc.elements['sessions-body'].textContent,/Log attached/);
+  assert.match(doc.elements['source-view'].textContent,/npm test/);
+  assert.equal(doc.elements['source-help'].hidden,true);
+  doc.elements['workspace-list'].querySelectorAll('button').at(-1)!.dispatch('click');
+  assert.match(doc.elements['sessions-body'].textContent,/Log missing/);
+});
+
+test('missing Claude source shows exact filename and copy feedback with a clipboard fallback',async()=>{
+  const doc=documentFixture(),r=populated();
+  r.sessions[0]!.agent='claude_code';r.sessions[0]!.id='claude_code:target-id';
+  let copied='';
+  const withClipboard={...doc,defaultView:{navigator:{platform:'MacIntel',clipboard:{writeText:async(text:string)=>{copied=text;}}}}};
+  renderReport(r,withClipboard as unknown as Document);
+  doc.elements['sessions-body'].querySelectorAll('button')[0]!.dispatch('click');
+  assert.match(doc.elements.inspector.textContent,/Expected filename:target-id.jsonl/);
+  assert.match(doc.elements.inspector.textContent,/⌘⇧G.*~\/.claude\/projects/);
+  doc.elements.inspector.querySelectorAll('button')[0]!.dispatch('click');await settle();
+  assert.equal(copied,'target-id.jsonl');assert.match(doc.elements.inspector.textContent,/Copied/);
+  renderReport(r,doc as unknown as Document);
+  doc.elements['sessions-body'].querySelectorAll('button')[0]!.dispatch('click');
+  doc.elements.inspector.querySelectorAll('button')[0]!.dispatch('click');await settle();
+  assert.match(doc.elements.inspector.textContent,/Select and copy the text shown/);
+});
+
+test('folder matching requires a report and clear cancels an in-progress folder scan',async()=>{
+  const doc=documentFixture();bootstrap(doc as unknown as Document);
+  let reads=0;
+  doc.elements['session-folder'].dispatch('change',{target:{files:[{name:'a.jsonl',size:1,text:async()=>{reads++;return demoLog;}}]}});
+  await settle();assert.equal(reads,0);assert.match(doc.elements['import-error'].textContent,/Open a report/);
+  doc.elements['demo-button'].dispatch('click');
+  let finish!:(text:string)=>void;
+  doc.elements['session-folder'].dispatch('change',{target:{files:[{name:'a.jsonl',size:100,text:()=>new Promise<string>(resolve=>{finish=resolve;})}]}});
+  await settle();doc.elements['workspace-clear'].dispatch('click');finish(demoLog);await settle();
+  assert.equal(doc.elements['workspace-files'].hidden,true);assert.equal(doc.elements['import-status'].textContent,'');
+});
+
+test('platform detection uses client hints, then legacy browser information',()=>{
+  assert.equal(detectPlatform({userAgentData:{platform:'Windows'},platform:'MacIntel'}),'windows');
+  assert.equal(detectPlatform({platform:'MacIntel'}),'mac');
+  assert.equal(detectPlatform({platform:'Linux x86_64'}),'linux');
+  assert.equal(detectPlatform({userAgent:'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'}),'windows');
+  assert.equal(detectPlatform({}),'unknown');
+});
+
+test('clickable paths copy platform-specific locations and platform override updates session help',async()=>{
+  const doc=documentFixture();let copied='';
+  const browserDoc={...doc,defaultView:{navigator:{platform:'Win32',clipboard:{writeText:async(value:string)=>{copied=value;}}}}};
+  bootstrap(browserDoc as unknown as Document);
+  assert.equal(doc.elements['platform-select'].value,'windows');
+  assert.match(doc.elements['session-path-guide'].textContent,/Windows:.*Alt\+D/s);
+  assert.doesNotMatch(doc.elements['session-path-guide'].textContent,/⌘/);
+  doc.elements['session-path-guide'].querySelectorAll('button')[0]!.dispatch('click');await settle();
+  assert.equal(copied,'%USERPROFILE%\\.claude\\projects\\');
+  assert.match(doc.elements['session-path-guide'].textContent,/Copied/);
+  const r=structuredClone(demoReport);r.report.demo=false;
+  doc.elements['report-file'].dispatch('change',{target:{files:[localFile('report.json',JSON.stringify(r))]}});await settle();
+  doc.elements.findings.querySelectorAll('button')[0]!.dispatch('click');
+  assert.match(doc.elements['source-help'].textContent,/%USERPROFILE%\\.codex\\sessions\\/);
+  doc.elements['platform-select'].value='linux';doc.elements['platform-select'].dispatch('change');
+  assert.match(doc.elements['session-path-guide'].textContent,/Linux:.*Ctrl\+L/s);
+  assert.match(doc.elements['source-help'].textContent,/Linux:.*~\/.codex\/sessions/s);
+  assert.doesNotMatch(doc.elements['source-help'].textContent,/%USERPROFILE%|⌘/);
+  doc.elements['source-help'].querySelectorAll('button')[1]!.dispatch('click');await settle();
+  assert.equal(copied,'~/.codex/sessions/');
+  doc.elements['platform-select'].value='mac';doc.elements['platform-select'].dispatch('change');
+  assert.match(doc.elements['source-help'].textContent,/macOS:.*⌘⇧G/s);
 });

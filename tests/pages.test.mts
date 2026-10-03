@@ -24,6 +24,8 @@ test('Pages artifact excludes stale reports and resolves assets and navigation u
       }
     }
   }
+  const version=readFileSync(new URL('../VERSION', import.meta.url),'utf8').trim();
+  assert.ok(readFileSync(new URL('index.html',site),'utf8').includes(`<span class="version">/ ${version}</span>`));
   const script = readFileSync(new URL('app.js', site), 'utf8');
   // Historical demo inputs mention these APIs. Exclude inert quoted strings
   // and comments before checking the viewer's direct network/storage access.

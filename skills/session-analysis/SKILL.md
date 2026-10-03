@@ -27,7 +27,7 @@ These are interpretation/presentation levels. Choose the mode from the request:
 
 - **Metrics:** counts, usage, summaries or report export. Complete steps 1–3 and 8–9 without loading interpretation/evaluation references.
 - **Contextual review:** “help improve my workflow,” diagnose, review or propose improvements. This already requests interpretation within selected scope; read the [interpretation guide](references/interpretation.md). Do not ask again to analyze an already selected source. Text export remains an explicit opt-in.
-- **Follow-up feedback:** review an existing recommendation or intervention. Keep reviewer decisions, attempts and outcomes separate; use the available local feedback commands shown by `session-analysis --help`.
+- **Follow-up feedback:** review an existing recommendation or intervention. Keep reviewer decisions, attempts and outcomes separate; use `feedback-template REPORT -o FEEDBACK.json`, then `feedback-template REPORT --recommendation-id ID -o ENTRY.json`. Record the user’s decision and reason in ENTRY.json; leave attempts/follow-up unknown or unattempted unless explicitly reported. Append with `feedback-add REPORT FEEDBACK.json ENTRY.json -o UPDATED.json`; validate with `feedback-validate REPORT UPDATED.json`. The viewer also offers local forms and explicit import/export.
 
 Read [acceptance cases](references/acceptance.md) only for evaluation/development, not routine metrics or contextual review.
 

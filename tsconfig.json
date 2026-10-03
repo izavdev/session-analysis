@@ -9,8 +9,15 @@
     "declaration": true,
     "skipLibCheck": true,
     "noEmitOnError": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
+    "rewriteRelativeImportExtensions": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/web/**"]
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "src/web/**"
+  ]
 }

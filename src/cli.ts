@@ -2,6 +2,8 @@
 import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {createFeedback,feedbackDraft,appendFeedback,validateFeedback} from './feedback.js';
+import type {FeedbackFile,FeedbackEntry} from './feedback.js';
 import {reviewOutcome} from './episodes.js';
 import {BUILD} from './build-info.js';
 import type {InterpretationProvenance} from './types.js';
@@ -13,12 +15,16 @@ import type {AgentName} from './types.js';
 
 const HELP = `Session Analysis — local-first diagnostics (no network or model calls)
 Usage: session-analysis <command> [options]
-Commands: discover, analyze, validate, packet, context, outcome, merge, export
+Commands: discover, analyze, validate, packet, context, outcome, feedback-template, feedback-add, feedback-validate, feedback-export, merge, export
   discover [--agent all|claude_code|codex|hermes] [--root DIRECTORY]
   analyze FILE_OR_DIR... -o REPORT.json [--agent auto|claude_code|codex|hermes] [--session-id AGENT:ID] [--include-excerpts]
   validate REPORT.json
   packet REPORT.json -o PACKET.json [--max-chars 12000]
   context REPORT.json SOURCE --event-id AGENT:SESSION:EVENT -o CONTEXT.json [--include-excerpts]
+  feedback-template REPORT.json -o FEEDBACK.json [--recommendation-id ID]
+  feedback-add REPORT.json FEEDBACK.json ENTRY.json -o UPDATED.json
+  feedback-validate REPORT.json FEEDBACK.json
+  feedback-export REPORT.json FEEDBACK.json -o COPY.json
   outcome CONTEXT.json REVIEW.json -o REVIEWED.json
   merge REPORT.json INTERPRETATION.json -o ASSISTED.json
   export REPORT.json -o REPORT.html
@@ -27,7 +33,7 @@ Commands: discover, analyze, validate, packet, context, outcome, merge, export
 interface Parsed {positionals: string[]; options: Map<string, string[]>; switches: Set<string>}
 function parse(rest: string[]): Parsed {
   const result: Parsed = {positionals: [], options: new Map(), switches: new Set()};
-  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id','--interpretation-metadata']);
+  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id','--interpretation-metadata','--recommendation-id']);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (valued.has(part)) {
@@ -117,6 +123,15 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       const report = analyze(chosen, parsed.switches.has('--include-excerpts'));
       validateReport(report);
       writeOutput(dest, report);
+    } else if (command.startsWith('feedback-')) {
+      const count=command==='feedback-template'?1:command==='feedback-add'?3:2;requireCount(parsed.positionals,count,command);
+      const report=readJson(parsed.positionals[0]!);validateReport(report);
+      let file:unknown=command==='feedback-template'?createFeedback(report):readJson(parsed.positionals[1]!);
+      validateFeedback(report,file);
+      if(command==='feedback-add') file=appendFeedback(report,file,readJson(parsed.positionals[2]!) as FeedbackEntry);
+      if(command==='feedback-validate') console.log('Valid feedback');
+      else if(['feedback-template','feedback-add','feedback-export'].includes(command)){const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,command==='feedback-template'&&option(parsed,'--recommendation-id')?feedbackDraft(report,option(parsed,'--recommendation-id')!):file);}
+      else throw new Error('Unknown feedback command');
     } else if (['validate', 'packet', 'context', 'outcome', 'merge', 'export'].includes(command)) {
       requireCount(parsed.positionals, ['merge','context','outcome'].includes(command) ? 2 : 1, command);
       const source = parsed.positionals[0]!;

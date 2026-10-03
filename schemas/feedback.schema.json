@@ -1,0 +1,213 @@
+{
+  "type": "object",
+  "required": [
+    "feedback_version",
+    "report_id",
+    "report_sha256",
+    "analysis_revision",
+    "entries"
+  ],
+  "properties": {
+    "feedback_version": {
+      "const": "1.0.0"
+    },
+    "report_id": {
+      "type": "string"
+    },
+    "report_sha256": {
+      "type": "string"
+    },
+    "analysis_revision": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "report.schema.json#/properties/provenance"
+        }
+      ]
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "supersedes",
+          "recommendation_id",
+          "recommendation_sha256",
+          "finding_ids",
+          "episode_ids",
+          "reviewer",
+          "recorded_at",
+          "review",
+          "attempt",
+          "follow_up"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "supersedes": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "recommendation_id": {
+            "type": "string"
+          },
+          "recommendation_sha256": {
+            "type": "string"
+          },
+          "finding_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "episode_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "reviewer": {
+            "type": "string"
+          },
+          "recorded_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "review": {
+            "type": "object",
+            "required": [
+              "decision",
+              "evidence_sufficient",
+              "correct",
+              "usefulness",
+              "reason"
+            ],
+            "properties": {
+              "decision": {
+                "enum": [
+                  "accept",
+                  "reject",
+                  "defer"
+                ]
+              },
+              "evidence_sufficient": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "correct": {
+                "type": [
+                  "boolean",
+                  "null"
+                ]
+              },
+              "usefulness": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 1,
+                "maximum": 5
+              },
+              "reason": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "attempt": {
+            "type": "object",
+            "required": [
+              "state",
+              "change",
+              "correctness_test"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "not_attempted",
+                  "attempted",
+                  "unknown"
+                ]
+              },
+              "change": {
+                "type": "string"
+              },
+              "correctness_test": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "follow_up": {
+            "anyOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "outcome",
+                  "basis",
+                  "correctness",
+                  "regressions",
+                  "additional_effort",
+                  "evidence_ids"
+                ],
+                "properties": {
+                  "outcome": {
+                    "enum": [
+                      "improved",
+                      "unchanged",
+                      "worse",
+                      "unknown"
+                    ]
+                  },
+                  "basis": {
+                    "enum": [
+                      "user_report",
+                      "observed_test",
+                      "model_inference"
+                    ]
+                  },
+                  "correctness": {
+                    "enum": [
+                      "preserved",
+                      "regression",
+                      "unknown"
+                    ]
+                  },
+                  "regressions": {
+                    "type": "string"
+                  },
+                  "additional_effort": {
+                    "type": "string"
+                  },
+                  "evidence_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "additionalProperties": false
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Local recommendation feedback 1.0.0"
+}

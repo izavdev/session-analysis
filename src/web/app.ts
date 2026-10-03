@@ -1,4 +1,6 @@
 /* Session Analysis — offline, read-only report viewer. */
+import {createFeedback,feedbackDraft,appendFeedback,validateFeedback,reportFingerprint} from '../feedback.ts';
+import type {FeedbackFile,FeedbackEntry} from '../feedback.ts';
 import demoData from '../../web/examples/codex-pages-report.json' with {type:'json'};
 import demoSource from './demo-source.json' with {type:'json'};
 import type {AgentName, UsageCoverage, EventType, Usage, NormalizedEvent, NormalizedSession, ReportSession, Finding, Recommendation, SkillCandidate, Evidence, Report} from '../types.js';
@@ -310,6 +312,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     if(ids.size!==1) throw new Error('Choose a Claude Code or Codex JSONL containing one session identity.');
     return [...ids][0]!;
   }
+  const feedbackFiles=new WeakMap<Document,Map<string,FeedbackFile>>();
   const reportGenerations=new WeakMap<Document,number>();
   export function renderReport(report: Report, doc: Document | undefined = root?.document): Report {
     const errors = validateReport(report);
@@ -346,6 +349,9 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       line(card,'span',title,'eyebrow'); line(card,'strong',formatNumber(value));
     }
     const workspace=workspaceFor(doc);
+    const feedbackKey=reportFingerprint(report);
+    let feedbackMap=feedbackFiles.get(doc);if(!feedbackMap){feedbackMap=new Map();feedbackFiles.set(doc,feedbackMap);}
+    const feedbackForReport=()=>feedbackMap!.get(feedbackKey)??createFeedback(report);
     const sourcePanel=byId('source-inspector');
     const sourceFile=byId('source-file') as HTMLInputElement;
     const sourceUpload=byId('source-upload');
@@ -438,6 +444,25 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       const timeline=line(box,'ol',undefined,'timeline');
       session.timeline.forEach(event=>line(timeline,'li',`${event.timestamp || 'Time unavailable'} · ${event.type}${event.tool_name ? ' · '+event.tool_name : ''} · ${event.event_id} · ${event.source_ref}`));
       placeholder(timeline,'No timeline events reported.');
+    }
+    function feedbackForm(parent:HTMLElement,rec:Recommendation) {
+      const panel=line(parent,'details');line(panel,'summary','Record local feedback');
+      const status=line(panel,'p',undefined,'muted');
+      const show=()=>{const entries=feedbackMap!.get(feedbackKey)?.entries.filter(e=>e.recommendation_id===rec.id)??[];status.textContent=entries.length?entries.map(e=>`${e.reviewer}: ${e.review.decision}; usefulness ${e.review.usefulness??'unknown'}; ${e.attempt.state}; follow-up ${e.follow_up?.outcome??'missing'} — ${e.review.reason}`).join('\n'):'Unreviewed. Acceptance, implementation and improvement are separate.';};show();
+      const input=(title:string,value='')=>{const label=line(panel,'label',title);const field=line(label,'textarea') as HTMLTextAreaElement;field.value=value;return field;};
+      const select=(title:string,options:string[])=>{const label=line(panel,'label',title);const field=line(label,'select') as HTMLSelectElement;options.forEach(value=>{const option=line(field,'option',value) as HTMLOptionElement;option.value=value;});field.value=options[0]!;return field;};
+      const reviewer=input('Reviewer (anonymous allowed)','anonymous'),decision=select('Decision',['defer','accept','reject']),sufficient=select('Evidence sufficient',['unknown','yes','no']),correct=select('Factually correct',['unknown','yes','no']),rating=select('Usefulness',['unknown','1','2','3','4','5']),reason=input('Reason');
+      const attempted=select('Intervention attempt',['not_attempted','attempted','unknown']),change=input('What changed'),test=input('Correctness test');
+      const outcome=select('Follow-up outcome',['missing','unknown','improved','unchanged','worse']),basis=select('Follow-up evidence basis',['user_report','observed_test','model_inference']),correctness=select('Follow-up correctness',['unknown','preserved','regression']),regressions=input('Regressions'),effort=input('Additional effort'),refs=input('Follow-up evidence IDs (comma separated)');
+      const save=line(panel,'button','Save feedback in this workspace');save.setAttribute('type','button');
+      save.onclick=()=>{try{
+        const file=feedbackForReport(),entry=feedbackDraft(report,rec.id);
+        const prior=file.entries.filter(e=>e.recommendation_id===rec.id&&e.reviewer===reviewer.value).at(-1);entry.supersedes=prior?.id??null;entry.reviewer=reviewer.value||'anonymous';
+        entry.review={decision:decision.value as FeedbackEntry['review']['decision'],evidence_sufficient:sufficient.value==='unknown'?null:sufficient.value==='yes',correct:correct.value==='unknown'?null:correct.value==='yes',usefulness:rating.value==='unknown'?null:Number(rating.value),reason:reason.value};
+        entry.attempt={state:attempted.value as FeedbackEntry['attempt']['state'],change:change.value,correctness_test:test.value};
+        if(outcome.value!=='missing')entry.follow_up={outcome:outcome.value as NonNullable<FeedbackEntry['follow_up']>['outcome'],basis:basis.value as NonNullable<FeedbackEntry['follow_up']>['basis'],correctness:correctness.value as NonNullable<FeedbackEntry['follow_up']>['correctness'],regressions:regressions.value,additional_effort:effort.value,evidence_ids:refs.value.split(',').map(id=>id.trim()).filter(Boolean)};
+        feedbackMap!.set(feedbackKey,appendFeedback(report,file,entry));show();
+      }catch(error){status.textContent=error instanceof Error?error.message:'Unable to save feedback';}};
     }
     function paintScope() {
       const filtered=selectScope(report,(byId('agent-filter') as HTMLSelectElement).value);
@@ -539,6 +564,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
         const linked=filtered.findings.filter(item=>group.some(rec=>rec.finding_ids.includes(item.id)));
         const support=line(card,'details');line(support,'summary','Why this is suggested · evidence');
         linked.forEach(finding=>paintFinding(support,finding));
+        group.forEach(item=>feedbackForm(card,item));
         if(group.length>1){
           const details=line(card,'details');line(details,'summary',`Linked findings (${group.length})`);
           group.forEach(item=>line(details,'p',`${item.id} · ${item.finding_ids.join(', ')}`));
@@ -569,6 +595,17 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     const notes=clear('analysis-notes');
     line(notes,'p',`Analysis: ${report.analysis_usage.mode} · model tokens: ${formatNumber(report.analysis_usage.model_tokens)}`);
     report.analysis_usage.notes.forEach(note=>line(notes,'p',note));
+    const feedbackPanel=line(notes,'details');line(feedbackPanel,'summary','Local feedback files');
+    line(feedbackPanel,'p','Feedback stays in memory until you explicitly export it. Import requires the same report and recommendation fingerprints.');
+    const feedbackStatus=line(feedbackPanel,'p');
+    const exportFeedback=line(feedbackPanel,'button','Export feedback JSON');exportFeedback.setAttribute('type','button');
+    exportFeedback.onclick=()=>{try{const file=feedbackForReport();validateFeedback(report,file);const link=line(feedbackPanel,'a','Download feedback.json') as HTMLAnchorElement;link.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(file,null,2));link.download='feedback.json';feedbackStatus.textContent='Use the download link to save feedback locally.';}catch(error){feedbackStatus.textContent=error instanceof Error?error.message:'Unable to export feedback';}};
+    const importLabel=line(feedbackPanel,'label','Import feedback JSON');const importFeedback=line(importLabel,'input') as HTMLInputElement;importFeedback.type='file';importFeedback.accept='.json,application/json';
+    importFeedback.onchange=async()=>{try{const file=importFeedback.files?.[0];if(!file)return;if(file.size>MAX_FILE_BYTES)throw new Error('Feedback exceeds 20 MiB');const value:unknown=JSON.parse(await file.text());if(reportGenerations.get(doc!)!==generation)return;validateFeedback(report,value);
+      const current=feedbackForReport(),ids=new Map(current.entries.map(e=>[e.id,e]));let merged=current;
+      for(const entry of value.entries){const existing=ids.get(entry.id);if(existing){if(JSON.stringify(existing)!==JSON.stringify(entry))throw new Error('Conflicting feedback ID');continue;}merged=appendFeedback(report,merged,entry);ids.set(entry.id,entry);}
+      feedbackMap!.set(feedbackKey,merged);paintScope();feedbackStatus.textContent=`Imported ${value.entries.length} feedback records.`;
+    }catch(error){feedbackStatus.textContent=error instanceof Error?error.message:'Unable to import feedback';}};
     (byId('agent-filter') as HTMLSelectElement).onchange=paintScope;
     workspace.sourcesChanged=()=>{
       if(reportGenerations.get(doc!)!==generation)return;
@@ -693,7 +730,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       catch(cause){error(cause instanceof Error?cause.message:'Unable to open report.');}
     }
     get('clear-button').addEventListener('click',()=>{if(workspace.active!==null)removeReport(workspace.active);});
-    get('workspace-clear').addEventListener('click',()=>{
+    get('workspace-clear').addEventListener('click',()=>{feedbackFiles.delete(doc!);
       workspace.epoch++;workspace.reports=[];workspace.sources.clear();workspace.active=null;
       hideReport();refresh();get('import-error').hidden=true;get('import-status').textContent='';
       (get('report-file') as HTMLInputElement).value='';

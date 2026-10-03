@@ -86,6 +86,28 @@ remain null. Export does not alter analysis identity.
 
 The packet has a **serialized character budget**, not a claimed token budget. Interpretation is optional and uses the agent you are already working with. No model calls happen inside this toolkit. The merger rejects unknown references and attempts to replace computed metrics; it cannot guarantee a model's explanation is true.
 
+## Local recommendation feedback
+
+Feedback is a separate versioned JSON file. The viewer offers **Record local feedback**
+for suggestions, with explicit import/export under **Local feedback files**. It records
+correctness, grounding, usefulness and decision separately from attempts and follow-up.
+Files and comments stay in memory until exported; refreshing clears them.
+
+```sh
+session-analysis feedback-template assisted.json -o feedback.json
+session-analysis feedback-template assisted.json --recommendation-id ID -o entry.json
+# Edit entry.json with the reviewer decision/reason, attempt and follow-up if known.
+session-analysis feedback-add assisted.json feedback.json entry.json -o updated-feedback.json
+session-analysis feedback-validate assisted.json updated-feedback.json
+session-analysis feedback-export assisted.json updated-feedback.json -o feedback-copy.json
+```
+
+Report/recommendation fingerprints reject stale attachment. `supersedes` references a
+previous record when revising a review; histories are preserved and duplicate IDs fail.
+Anonymous review is supported. An acceptance decision means neither implemented nor
+improved. Follow-up evidence basis distinguishes user report, observed test and inference.
+Measured reports remain immutable; regenerate and explicitly review feedback when analysis changes.
+
 ## Portable skill
 
 ### Install with the cross-agent wizard

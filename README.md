@@ -71,19 +71,50 @@ The packet has a **serialized character budget**, not a claimed token budget. In
 
 ## Portable skill
 
-The editable source is [skills/session-analysis/SKILL.md](skills/session-analysis/SKILL.md). Nothing is installed automatically.
-
-Without activation, ask an agent:
-
-> Read `skills/session-analysis/SKILL.md` in this repository and analyze these selected sessions. Use metrics-only first and propose improvements backed by evidence.
-
-For activation, make the built CLI available in the agent's Node environment. The repository is not published to npm; do not assume a bare remote `npx session-analysis` resolves to this project. Install this local checkout or its packed tarball explicitly:
+### Install with the cross-agent wizard
 
 ```sh
-npm install -g /absolute/path/to/session-analysis
+npx skills@latest add izavdev/session-analysis
 ```
 
-Then copy the **entire** `skills/session-analysis` folder into the chosen agent's skill directory. Do not overwrite an existing skill without reviewing it.
+Select `session-analysis`, then choose the agents and installation method offered by the wizard. The installer discovers [skills/session-analysis/SKILL.md](skills/session-analysis/SKILL.md) and installs its complete folder, including the interpretation and acceptance references. No generated agent-specific skill copies or plugin manifest are required.
+
+Installations are project-scoped by default; add `--global` to make the skill available across projects. For example:
+
+```sh
+# Install for Claude Code and Codex in the current project
+npx skills@latest add izavdev/session-analysis --skill session-analysis --agent claude-code codex
+
+# Install for Hermes in the default user skill directory
+npx skills@latest add izavdev/session-analysis --skill session-analysis --agent hermes-agent --global
+
+# Preview the skills available from this checkout without installing
+npx skills@latest add . --list
+```
+
+See the [Skills CLI documentation](https://github.com/vercel-labs/skills) for supported agents, copy/symlink methods, and updates. For a custom Hermes profile, use the manual installation below to target its active home. Review an existing installation before replacing it, and avoid installing the same skill through multiple methods in one agent.
+
+### CLI prerequisite and invocation
+
+The skill installer installs instructions and references; it does **not** install the analyzer CLI. Requires Node 24.21.0 or newer. Clone this repository and build it, then make the CLI available in the Node environment your agent uses:
+
+```sh
+git clone https://github.com/izavdev/session-analysis.git
+cd session-analysis
+nvm use  # if using nvm
+npm ci
+npm run build
+npm install -g "$PWD"
+session-analysis --help
+```
+
+An existing built checkout or its packed tarball can also be installed explicitly. The repository is not published to npm; do not assume a bare remote `npx session-analysis` resolves to this project. From a built checkout, `npx --no-install session-analysis` works without a global CLI install.
+
+Restart/refresh the agent according to its normal skill discovery workflow, then verify it discovers `session-analysis`. Invoke it using the client's skill syntax, for example `$session-analysis` in Codex or `/session-analysis` in Claude Code, or ask “Use the session-analysis skill to analyze these selected sessions.”
+
+### Manual installation or use without activation
+
+The editable source remains `skills/session-analysis/`. To install manually, first make the CLI available as above, then copy the **entire** folder into the chosen agent's skill directory. Do not overwrite an existing skill without reviewing it.
 
 | Agent | User-owned skill location |
 |---|---|
@@ -91,7 +122,11 @@ Then copy the **entire** `skills/session-analysis` folder into the chosen agent'
 | Codex | `~/.agents/skills/session-analysis/` |
 | Hermes | `${HERMES_HOME:-$HOME/.hermes}/skills/session-analysis/` for the active profile |
 
-Keep this repository as the editable source; copies are snapshots that must be deliberately updated. Restart/refresh the agent according to its normal skill discovery workflow. Installation is not complete until that agent actually discovers the skill. The toolkit does not configure another profile.
+Keep this repository as the editable source; manually installed copies are snapshots that must be deliberately updated. Installation is not complete until the agent actually discovers the skill. The toolkit does not configure another profile.
+
+Without activation, ask an agent:
+
+> Read `skills/session-analysis/SKILL.md` in this repository and analyze these selected sessions. Use metrics-only first and propose improvements backed by evidence.
 
 Official setup references: [Claude Code skills](https://code.claude.com/docs/en/skills), [Codex skills](https://developers.openai.com/codex/skills), [Hermes skills](https://hermes-agent.nousresearch.com/docs/user-guide/features/skills).
 

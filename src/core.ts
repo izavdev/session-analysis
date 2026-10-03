@@ -1,5 +1,7 @@
 import {createHash} from 'node:crypto';
 import type {NormalizedEvent, NormalizedSession, Report, ReportSession, Finding, Recommendation, Evidence, SkillCandidate, Usage} from './types.js';
+import {BUILD} from './build-info.js';
+import type {InterpretationProvenance} from './types.js';
 import {validateReport} from './validation.js';
 
 function canonical(value:unknown):string {return JSON.stringify(value,(_key,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.keys(v).sort().map(k=>[k,v[k]])):v)??'null';}
@@ -29,13 +31,13 @@ export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Repo
     const id=s.agent+':'+s.id,runs:ReportSession['model_runs']=[];
     for(const e of s.events) if(e.model) {const run={model:e.model,provider:e.provider??null};if(!runs.length||runs.at(-1)?.model!==run.model||runs.at(-1)?.provider!==run.provider) runs.push(run);}
     return {id,agent:s.agent,agent_version:s.agent_version,started_at:s.started_at,ended_at:s.ended_at,parent_id:s.parent_id?s.agent+':'+s.parent_id:null,relationship:s.relationship,
-      usage:structuredClone(s.usage),coverage:{...structuredClone(s.coverage),limitations:s.coverage.limitations.map(redact)},
+      source:{...s.source,normalized_sha256:createHash('sha256').update(canonical(s.events)).digest('hex')},usage:structuredClone(s.usage),coverage:{...structuredClone(s.coverage),limitations:s.coverage.limitations.map(redact)},
       metrics:{tool_call_count:s.events.filter(e=>e.type==='tool_call').length,tool_error_count:0,skill_load_count:0,event_count:s.events.length},model_runs:runs,
       timeline:s.events.map(e=>({event_id:id+':'+e.id,type:e.type,timestamp:e.timestamp,tool_name:e.tool_name??null,source_ref:sourceRef(e)}))};
   });
   const totals=Object.fromEntries(usageFields.map(k=>[k,resultSessions.some(s=>s.usage[k]!==null)?resultSessions.reduce((n,s)=>n+(s.usage[k]??0),0):null])) as unknown as Usage;
   const usage=usageFields.every(k=>totals[k]===null)?'unavailable':resultSessions.every(s=>s.coverage.usage==='reported'&&s.usage.total_tokens!==null)?'reported':'partial';
-  const report:Report={schema_version:'1.0.0',report:{id:'report:'+digest(sessions),generated_at:new Date().toISOString(),analyzer_version:'0.1.0',mode:resultSessions.length===1?'single_session':'multi_session',status:usage==='reported'&&!excluded.length&&accepted.every(s=>s.coverage.limitations.length===0)?'complete':'partial',demo:false},
+  const report:Report={schema_version:'1.0.0',provenance:{analyzer:{version:BUILD.version,revision:BUILD.revision,build_sha256:BUILD.build_sha256},instructions:{skill_sha256:BUILD.skill_sha256,guide_sha256:BUILD.guide_sha256},interpretations:[]},report:{id:'report:'+digest(sessions),generated_at:new Date().toISOString(),analyzer_version:BUILD.version,mode:resultSessions.length===1?'single_session':'multi_session',status:usage==='reported'&&!excluded.length&&accepted.every(s=>s.coverage.limitations.length===0)?'complete':'partial',demo:false},
     scope:{session_ids:resultSessions.map(s=>s.id),excluded_sessions:excluded},coverage:{usage,limitations:['Task outcomes are unknown; successful tool calls do not verify outcomes.']},
     summary:{session_count:resultSessions.length,tool_call_count:resultSessions.reduce((n,s)=>n+s.metrics.tool_call_count,0),finding_count:0,input_tokens:totals.input_tokens,output_tokens:totals.output_tokens,total_tokens:totals.total_tokens},
     sessions:resultSessions,metrics:{tools:[],skills:[]},findings:[],recommendations:[],skill_candidates:[],evidence:[],
@@ -172,6 +174,8 @@ export function selectContext(report:Report,source:NormalizedSession,eventIds:st
   validateReport(report);
   const sid=source.agent+':'+source.id,target=report.sessions.find(s=>s.id===sid);
   if(!target) throw new Error('Source session does not match report');
+  if(!target.source) throw new Error('Legacy report lacks source fingerprint; regenerate before registering context');
+  if(target.source.fingerprint!==source.source.fingerprint||target.source.normalized_sha256!==createHash('sha256').update(canonical(source.events)).digest('hex')) throw new Error('Source fingerprint does not match report');
   const timeline=source.events.map(e=>({event_id:sid+':'+e.id,type:e.type,timestamp:e.timestamp,tool_name:e.tool_name??null,source_ref:sourceRef(e)}));
   if(canonical(timeline)!==canonical(target.timeline)) throw new Error('Source timeline does not match report');
   if(!eventIds.length) throw new Error('Select at least one event');
@@ -203,7 +207,7 @@ export function selectContext(report:Report,source:NormalizedSession,eventIds:st
 }
 
 /** Append only manually inferred claims tied to existing evidence; validate the complete merged report. */
-export function mergeInterpretation(report:Report,interpretation:unknown):Report {
+export function mergeInterpretation(report:Report,interpretation:unknown,provenance?:InterpretationProvenance):Report {
   validateReport(report);
   if(interpretation===null||typeof interpretation!=='object'||Array.isArray(interpretation)||Object.keys(interpretation).some(k=>!['findings','recommendations','skill_candidates'].includes(k))) throw new Error('Only supplemental findings, recommendations and skill_candidates are allowed');
   const input=interpretation as Record<string,unknown>,result=structuredClone(report);
@@ -218,6 +222,10 @@ export function mergeInterpretation(report:Report,interpretation:unknown):Report
   for(const f of additions.findings){if(f.claim_type!=='inferred'||!Array.isArray(f.evidence_ids)||!f.evidence_ids.length||!Array.isArray(f.session_ids)||!f.session_ids.length||!refs(f.evidence_ids,new Set(evids.keys()))||!refs(f.session_ids,sids)||!refs(f.recommendation_ids,recIds)||f.evidence_ids.some(id=>!f.session_ids.includes(evids.get(id)!))) throw new Error('Supplemental findings must be inferred and evidenced');}
   for(const rec of additions.recommendations) if(!Array.isArray(rec.finding_ids)||!rec.finding_ids.length||!refs(rec.finding_ids,findIds)) throw new Error('Recommendation references unknown findings');
   for(const c of additions.skill_candidates) if(!Array.isArray(c.evidence_ids)||!c.evidence_ids.length||!Array.isArray(c.session_ids)||!c.session_ids.length||!refs(c.evidence_ids,new Set(evids.keys()))||!refs(c.session_ids,sids)||c.evidence_ids.some(id=>!c.session_ids.includes(evids.get(id)!))) throw new Error('Candidate references unknown evidence or sessions');
+  const record:InterpretationProvenance=provenance??{model:null,instruction_sha256:null,packet_sha256:null,max_chars:null,context_event_ids:[],model_tokens:null};
+  if(!result.provenance) result.provenance={analyzer:{version:report.report.analyzer_version,revision:null,build_sha256:'unknown'},instructions:{skill_sha256:'unknown',guide_sha256:'unknown'},interpretations:[]};
+  result.provenance.interpretations.push(structuredClone(record));
+  result.analysis_usage.model_tokens=record.model_tokens;
   result.findings.push(...structuredClone(additions.findings));result.recommendations.push(...structuredClone(additions.recommendations));result.skill_candidates.push(...structuredClone(additions.skill_candidates));
   result.summary.finding_count=result.findings.length;result.analysis_usage.mode='assisted';result.analysis_usage.notes.push('Manual interpretation added; inferred claims are not measured savings.');
   validateReport(result);return result;

@@ -41,7 +41,8 @@
           "format": "date-time"
         },
         "analyzer_version": {
-          "const": "0.1.0"
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
         },
         "mode": {
           "enum": [
@@ -334,6 +335,111 @@
         },
         "safe_to_share": {
           "type": "null"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "analyzer",
+        "instructions",
+        "interpretations"
+      ],
+      "properties": {
+        "analyzer": {
+          "type": "object",
+          "required": [
+            "version",
+            "revision",
+            "build_sha256"
+          ],
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "build_sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "instructions": {
+          "type": "object",
+          "required": [
+            "skill_sha256",
+            "guide_sha256"
+          ],
+          "properties": {
+            "skill_sha256": {
+              "type": "string"
+            },
+            "guide_sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "interpretations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "model",
+              "instruction_sha256",
+              "packet_sha256",
+              "max_chars",
+              "context_event_ids",
+              "model_tokens"
+            ],
+            "properties": {
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "instruction_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "packet_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "max_chars": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "context_event_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model_tokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false
@@ -686,6 +792,26 @@
           "items": {
             "$ref": "#/$defs/timeline_event"
           }
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "format",
+            "fingerprint",
+            "normalized_sha256"
+          ],
+          "properties": {
+            "format": {
+              "type": "string"
+            },
+            "fingerprint": {
+              "type": "string"
+            },
+            "normalized_sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

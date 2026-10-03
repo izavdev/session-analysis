@@ -3,3 +3,5 @@ dist/
 _site/
 .DS_Store
 *.tsbuildinfo
+
+src/build-info.ts

@@ -2,6 +2,8 @@
 import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {BUILD} from './build-info.js';
+import type {InterpretationProvenance} from './types.js';
 import {discover, loadSessions} from './adapters.js';
 import {analyze, evidencePacket, mergeInterpretation, selectContext} from './core.js';
 import {renderHtml} from './export.js';
@@ -23,7 +25,7 @@ Commands: discover, analyze, validate, packet, context, merge, export
 interface Parsed {positionals: string[]; options: Map<string, string[]>; switches: Set<string>}
 function parse(rest: string[]): Parsed {
   const result: Parsed = {positionals: [], options: new Map(), switches: new Set()};
-  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id']);
+  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id','--interpretation-metadata']);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (valued.has(part)) {
@@ -91,7 +93,7 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   try {
     const [command, ...args] = argv;
     if (!command || command === '--help' || command === '-h') { console.log(HELP); return 0; }
-    if (command === '--version') { console.log('0.2.0'); return 0; }
+    if (command === '--version') { console.log(BUILD.version); return 0; }
     const parsed = parse(args);
     if (command === 'discover') {
       requireCount(parsed.positionals, 0, command);
@@ -133,7 +135,7 @@ export function main(argv: string[] = process.argv.slice(2)): number {
         if(matches.length!==1) throw new Error('Select events from exactly one source session');
         writeOutput(dest!,selectContext(report,matches[0]!,ids,parsed.switches.has('--include-excerpts')));
       } else if (command === 'merge') {
-        const merged = mergeInterpretation(report, readJson(parsed.positionals[1]!));
+        const merged = mergeInterpretation(report, readJson(parsed.positionals[1]!),option(parsed,'--interpretation-metadata')?readJson(option(parsed,'--interpretation-metadata')!) as InterpretationProvenance:undefined);
         validateReport(merged);
         writeOutput(dest!, merged);
       } else writeOutput(dest!, renderHtml(report));

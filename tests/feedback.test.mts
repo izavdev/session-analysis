@@ -22,3 +22,14 @@ test('explicit feedback round trip preserves decisions separately from attempts 
   const revision=structuredClone(entry);revision.id='revision';revision.supersedes=entry.id;revision.review.decision='reject';const revised=appendFeedback(r,saved,revision);assert.equal(revised.entries.length,2);
   const follow=structuredClone(entry);follow.id='follow';follow.follow_up={outcome:'improved',basis:'user_report',correctness:'unknown',regressions:'',additional_effort:'',evidence_ids:[]};assert.throws(()=>appendFeedback(r,saved,follow),/attempt/);
 });
+
+test('CLI feedback template, append, validation, export and analysis round trip offline',async()=>{
+  const {mkdtempSync,writeFileSync}=await import('node:fs');const {tmpdir}=await import('node:os');const {join}=await import('node:path');const {execFileSync}=await import('node:child_process');
+  const dir=mkdtempSync(join(tmpdir(),'feedback-cli-')),r=reviewedReport(),reportPath=join(dir,'report.json');writeFileSync(reportPath,JSON.stringify(r));
+  const cli=new URL('../dist/cli.js',import.meta.url).pathname,run=(...args)=>execFileSync(process.execPath,[cli,...args],{encoding:'utf8'});
+  const file=join(dir,'feedback.json'),draft=join(dir,'entry.json'),updated=join(dir,'updated.json'),copy=join(dir,'copy.json');
+  run('feedback-template',reportPath,'-o',file);run('feedback-template',reportPath,'--recommendation-id',r.recommendations[0].id,'-o',draft);
+  const entry=JSON.parse(readFileSync(draft,'utf8'));entry.review.reason='Explicit local review';writeFileSync(draft,JSON.stringify(entry));
+  run('feedback-add',reportPath,file,draft,'-o',updated);assert.match(run('feedback-validate',reportPath,updated),/Valid feedback/);run('feedback-export',reportPath,updated,'-o',copy);assert.deepEqual(JSON.parse(readFileSync(copy,'utf8')),JSON.parse(readFileSync(updated,'utf8')));
+  const samples=join(dir,'samples.json'),summary=join(dir,'summary.json');writeFileSync(samples,JSON.stringify({samples:[{report:r,feedback:JSON.parse(readFileSync(copy,'utf8'))}]}));run('feedback-analyze',samples,'-o',summary);assert.equal(JSON.parse(readFileSync(summary,'utf8')).reviewed_recommendations,1);
+});

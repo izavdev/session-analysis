@@ -2,6 +2,8 @@
 import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {analyzeFeedback,compareTrial} from './feedback-analysis.js';
+import type {ReviewedSample,Trial} from './feedback-analysis.js';
 import {createFeedback,feedbackDraft,appendFeedback,validateFeedback} from './feedback.js';
 import type {FeedbackFile,FeedbackEntry} from './feedback.js';
 import {reviewOutcome} from './episodes.js';
@@ -15,12 +17,14 @@ import type {AgentName} from './types.js';
 
 const HELP = `Session Analysis — local-first diagnostics (no network or model calls)
 Usage: session-analysis <command> [options]
-Commands: discover, analyze, validate, packet, context, outcome, feedback-template, feedback-add, feedback-validate, feedback-export, merge, export
+Commands: discover, analyze, validate, packet, context, outcome, feedback-template, feedback-add, feedback-validate, feedback-export, feedback-analyze, trial, merge, export
   discover [--agent all|claude_code|codex|hermes] [--root DIRECTORY]
   analyze FILE_OR_DIR... -o REPORT.json [--agent auto|claude_code|codex|hermes] [--session-id AGENT:ID] [--include-excerpts]
   validate REPORT.json
   packet REPORT.json -o PACKET.json [--max-chars 12000]
   context REPORT.json SOURCE --event-id AGENT:SESSION:EVENT -o CONTEXT.json [--include-excerpts]
+  feedback-analyze SELECTED_SAMPLES.json -o SUMMARY.json
+  trial BASELINE.json FOLLOWUP.json TRIAL.json -o COMPARISON.json
   feedback-template REPORT.json -o FEEDBACK.json [--recommendation-id ID]
   feedback-add REPORT.json FEEDBACK.json ENTRY.json -o UPDATED.json
   feedback-validate REPORT.json FEEDBACK.json
@@ -123,6 +127,11 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       const report = analyze(chosen, parsed.switches.has('--include-excerpts'));
       validateReport(report);
       writeOutput(dest, report);
+    } else if(command==='feedback-analyze') {
+      requireCount(parsed.positionals,1,command);const selected=readJson(parsed.positionals[0]!) as {samples:ReviewedSample[];opportunities?:Array<{id:string;found:boolean|null}>};
+      if(!selected||!Array.isArray(selected.samples))throw new Error('Expected explicitly selected report/feedback samples');const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,analyzeFeedback(selected.samples,selected.opportunities));
+    } else if(command==='trial') {
+      requireCount(parsed.positionals,3,command);const baseline=readJson(parsed.positionals[0]!);const followup=readJson(parsed.positionals[1]!);validateReport(baseline);validateReport(followup);const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,compareTrial(baseline,followup,readJson(parsed.positionals[2]!) as Trial));
     } else if (command.startsWith('feedback-')) {
       const count=command==='feedback-template'?1:command==='feedback-add'?3:2;requireCount(parsed.positionals,count,command);
       const report=readJson(parsed.positionals[0]!);validateReport(report);

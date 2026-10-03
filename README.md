@@ -108,6 +108,22 @@ Anonymous review is supported. An acceptance decision means neither implemented 
 improved. Follow-up evidence basis distinguishes user report, observed test and inference.
 Measured reports remain immutable; regenerate and explicitly review feedback when analysis changes.
 
+Summarize selected report/feedback pairs with `feedback-analyze samples.json -o summary.json`.
+The manifest contains `samples: [{report: REPORT_OBJECT, feedback: FEEDBACK_OBJECT,
+task_family: "optional label"}]` and optional `opportunities: [{id, found: true|false|null}]`.
+Only explicit reviews enter assessment denominators; revisions supersede earlier records,
+missing ratings/follow-up remain visible, and results are sliced by analyzer/instructions,
+adapter, task family and intervention kind. User reports and observed tests stay separate.
+Intervals are descriptive for small selected samples, not proof of effectiveness.
+
+`trial baseline.json followup.json trial.json -o comparison.json` compares explicitly
+selected episodes. The [trial schema](schemas/trial.schema.json) records report fingerprints,
+episode/recommendation IDs, intervention, correctness criteria, complexity, concurrent changes,
+reviewer assessment and follow-up verification references. Unknown models, changed coverage/builds,
+and unassessed comparability are flagged. Partial or unallocated session usage yields no saving.
+Maintenance decisions are keep/revise/retire/revisit proposals with evidence and uncertainty.
+The automated full-loop example is synthetic, not a user intervention trial.
+
 ## Portable skill
 
 ### Install with the cross-agent wizard

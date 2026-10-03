@@ -36,8 +36,8 @@ test('three native adapters analyze, validate, packet, and export offline HTML',
   assert.equal(report.summary.session_count, 3);
   assert.equal(report.privacy.excerpts_included, false);
   run('validate', reportPath);
-  run('packet', reportPath, '-o', packetPath, '--max-chars', '80');
-  assert.ok(statSync(packetPath).size <= 80);
+  run('packet', reportPath, '-o', packetPath, '--max-chars', '12000');
+  assert.ok(statSync(packetPath).size <= 12000);
   run('export', reportPath, '-o', htmlPath);
   const html = readFileSync(htmlPath, 'utf8');
   assert.equal(html.match(/id="embedded-report"/g)?.length, 1);

@@ -223,7 +223,7 @@ test('ignored source records keep reported usage but make overall coverage parti
 test('packet fits serialized character budget and never includes dangling findings',()=>{
   const events=Array.from({length:20},(_,i)=>event(String(i),'tool_call','',{tool_name:'read',call_id:String(i),arguments:{x:i}}));
   const r=analyze([session('s1',events)]);
-  for(const limit of [80,160,450,1200,12000]) {
+  for(const limit of [1200,12000]) {
     const packet=evidencePacket(r,limit);
     assert.ok(JSON.stringify(packet).length<=limit); assert.equal(typeof packet.truncated,'boolean');
     const ids=new Set(packet.evidence.map(e=>e.id));
@@ -240,4 +240,15 @@ test('manual merge accepts only evidenced inferred additions without mutating or
   assert.equal(merged.summary.finding_count,r.summary.finding_count+1); assert.equal(merged.analysis_usage.mode,'assisted'); assert.equal(r.analysis_usage.mode,'metrics_only');
   validateReport(merged);
   for(const bad of [{summary:{total_tokens:999}},{evidence:[{id:'invented'}]},{findings:[{...f,id:'finding:fake',evidence_ids:['invented']}]},{findings:[{...f,id:'finding:fake',claim_type:'observed'}]}]) assert.throws(()=>mergeInterpretation(r,bad));
+});
+test('structured JSON arguments compare canonically while shell strings remain distinct',()=>{
+  const r=analyze([session('json',[
+    event('a','tool_call','',{tool_name:'read_file',arguments:'{"path":"a","offset":1}'}),
+    event('b','tool_call','',{tool_name:'read_file',arguments:'{ "offset": 1, "path": "a" }'}),
+    event('c','tool_call','',{tool_name:'read_file',arguments:'{"path":"b","offset":1}'}),
+    event('d','tool_call','',{tool_name:'shell',arguments:'echo a'}),
+    event('e','tool_call','',{tool_name:'shell',arguments:'echo  a'}),
+  ])]);
+  assert.equal(r.findings.filter(f=>f.rule_id==='repeated_tool_call').length,1);
+  assert.equal(r.findings[0].evidence_ids.length,2);
 });

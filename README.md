@@ -64,7 +64,86 @@ npx --no-install session-analysis merge report.json interpretation.json -o assis
 npx --no-install session-analysis export assisted.json -o assisted.html
 ```
 
+For selected task context, use the source session and namespaced event IDs from the report timeline:
+
+```sh
+npx --no-install session-analysis context report.json selected-session.jsonl --event-id codex:SESSION:e1 -o context.json
+# Explicitly opt in to bounded text with --include-excerpts when appropriate.
+npx --no-install session-analysis packet context.json --finding-id FINDING_ID -o packet.json
+npx --no-install session-analysis merge context.json interpretation.json -o assisted.json
+```
+
+Context validates source fingerprints and call/result linkage, registers citeable evidence,
+and preserves computed metrics. Legacy reports without source fingerprints must be regenerated
+for context registration. Claude and Codex rollout support native viewer inspection; other
+normalized adapters support CLI context without equivalent native viewer drill-down.
+Reports retain schema 1.0.0 compatibility with additive source, observation coverage and
+provenance fields. Old reports remain readable. Observed error/load counts can be incomplete;
+missing status is not a measured zero. `VERSION` drives release metadata; build hashes identify
+producing analyzer code. Merge accepts an optional `--interpretation-metadata FILE` containing
+model, instruction/packet hashes, max_chars, context_event_ids and model_tokens; unknown values
+remain null. Export does not alter analysis identity.
+
 The packet has a **serialized character budget**, not a claimed token budget. Interpretation is optional and uses the agent you are already working with. No model calls happen inside this toolkit. The merger rejects unknown references and attempts to replace computed metrics; it cannot guarantee a model's explanation is true.
+
+## Local recommendation feedback
+
+Feedback is a separate versioned JSON file. The viewer offers **Record local feedback**
+for suggestions, with explicit import/export under **Local feedback files**. It records
+correctness, grounding, usefulness and decision separately from attempts and follow-up.
+Files and comments stay in memory until exported; refreshing clears them.
+
+```sh
+session-analysis feedback-template assisted.json -o feedback.json
+session-analysis feedback-template assisted.json --recommendation-id ID -o entry.json
+# Edit entry.json with the reviewer decision/reason, attempt and follow-up if known.
+session-analysis feedback-add assisted.json feedback.json entry.json -o updated-feedback.json
+session-analysis feedback-validate assisted.json updated-feedback.json
+session-analysis feedback-export assisted.json updated-feedback.json -o feedback-copy.json
+```
+
+Report/recommendation fingerprints reject stale attachment. `supersedes` references a
+previous record when revising a review; histories are preserved and duplicate IDs fail.
+Anonymous review is supported. An acceptance decision means neither implemented nor
+improved. Follow-up evidence basis distinguishes user report, observed test and inference.
+Measured reports remain immutable; regenerate and explicitly review feedback when analysis changes.
+
+Summarize selected report/feedback pairs with `feedback-analyze samples.json -o summary.json`.
+The manifest contains `samples: [{report: REPORT_OBJECT, feedback: FEEDBACK_OBJECT,
+task_family: "optional label"}]` and optional `opportunities: [{id, found: true|false|null}]`.
+Only explicit reviews enter assessment denominators; revisions supersede earlier records,
+missing ratings/follow-up remain visible, and results are sliced by analyzer/instructions,
+adapter, task family and intervention kind. User reports and observed tests stay separate.
+Intervals are descriptive for small selected samples, not proof of effectiveness.
+
+`trial baseline.json followup.json trial.json -o comparison.json` compares explicitly
+selected episodes. The [trial schema](schemas/trial.schema.json) records report fingerprints,
+episode/recommendation IDs, intervention, correctness criteria, complexity, concurrent changes,
+reviewer assessment and follow-up verification references. Unknown models, changed coverage/builds,
+and unassessed comparability are flagged. Partial or unallocated session usage yields no saving.
+Maintenance decisions are keep/revise/retire/revisit proposals with evidence and uncertainty.
+The automated full-loop example is synthetic, not a user intervention trial.
+
+## Contextual reusable workflows
+
+Exact wording is a cheap deferred signal; internal punctuation is preserved and explicit
+analyzer invocations/control requests are excluded. Development work on this toolkit remains
+eligible. Equivalent wording does not establish equivalent tasks.
+
+```sh
+session-analysis workflows reviewed-context.json groups.json -o workflows.json
+# Optional explicitly selected feedback and existing skill metadata:
+session-analysis workflows reviewed-context.json groups.json --feedback feedback.json --existing-skills selected-skills.json -o workflows.json
+```
+
+The [workflow assessment schema](schemas/workflows.schema.json) describes caller-supplied
+groups of selected episodes, including varied wording, conditions, decisions, outputs,
+applicability, uncertainty and tests. The toolkit does not call a semantic model or scan skills.
+Script/template/skill classification is reviewer-supplied. Non-equivalent groups produce no
+candidate; unverified or untried groups stay deferred. Actionable groups require reviewed
+verified outcomes and relevant observed-test feedback with correctness preserved. Existing
+skill metadata is an explicit list of `{id, title, applicability, source_sha256}`; authorized
+overlap can produce an extension proposal. No procedure is created or installed automatically.
 
 ## Portable skill
 

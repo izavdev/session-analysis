@@ -41,7 +41,8 @@
           "format": "date-time"
         },
         "analyzer_version": {
-          "const": "0.1.0"
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+(?:[-+][0-9A-Za-z.-]+)?$"
         },
         "mode": {
           "enum": [
@@ -337,6 +338,235 @@
         }
       },
       "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "required": [
+        "analyzer",
+        "instructions",
+        "interpretations"
+      ],
+      "properties": {
+        "analyzer": {
+          "type": "object",
+          "required": [
+            "version",
+            "revision",
+            "build_sha256"
+          ],
+          "properties": {
+            "version": {
+              "type": "string"
+            },
+            "revision": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "build_sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "instructions": {
+          "type": "object",
+          "required": [
+            "skill_sha256",
+            "guide_sha256"
+          ],
+          "properties": {
+            "skill_sha256": {
+              "type": "string"
+            },
+            "guide_sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "interpretations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "model",
+              "instruction_sha256",
+              "packet_sha256",
+              "max_chars",
+              "context_event_ids",
+              "model_tokens"
+            ],
+            "properties": {
+              "model": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "instruction_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "packet_sha256": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "max_chars": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              },
+              "context_event_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "model_tokens": {
+                "type": [
+                  "integer",
+                  "null"
+                ],
+                "minimum": 0
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "episodes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "session_id",
+          "request_evidence_id",
+          "action_evidence_ids",
+          "correction_evidence_ids",
+          "verification_evidence_ids",
+          "evidence_ids",
+          "boundary",
+          "limitations",
+          "outcome"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "session_id": {
+            "type": "string"
+          },
+          "request_evidence_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "action_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "correction_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "verification_evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "boundary": {
+            "enum": [
+              "request",
+              "partial"
+            ]
+          },
+          "limitations": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "outcome": {
+            "type": "object",
+            "required": [
+              "state",
+              "basis",
+              "criteria",
+              "evidence_ids",
+              "reviewer"
+            ],
+            "properties": {
+              "state": {
+                "enum": [
+                  "unknown",
+                  "claimed_complete",
+                  "verified",
+                  "failed",
+                  "blocked"
+                ]
+              },
+              "basis": {
+                "enum": [
+                  "unassessed",
+                  "assistant_claim",
+                  "reviewer_assessment"
+                ]
+              },
+              "criteria": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "evidence_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "reviewer": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "additionalProperties": false
+          },
+          "request_kind": {
+            "enum": [
+              "task",
+              "analyzer",
+              "control",
+              "unknown"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
   "additionalProperties": false,
@@ -447,6 +677,42 @@
           "items": {
             "type": "string"
           }
+        },
+        "observations": {
+          "type": "object",
+          "required": [
+            "errors",
+            "skill_loads",
+            "usage_granularity",
+            "source_context"
+          ],
+          "properties": {
+            "errors": {
+              "enum": [
+                "reported",
+                "partial",
+                "unavailable"
+              ]
+            },
+            "skill_loads": {
+              "enum": [
+                "reported",
+                "partial",
+                "unavailable"
+              ]
+            },
+            "usage_granularity": {
+              "enum": [
+                "request",
+                "session",
+                "unavailable"
+              ]
+            },
+            "source_context": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false
@@ -650,6 +916,26 @@
           "items": {
             "$ref": "#/$defs/timeline_event"
           }
+        },
+        "source": {
+          "type": "object",
+          "required": [
+            "format",
+            "fingerprint",
+            "normalized_sha256"
+          ],
+          "properties": {
+            "format": {
+              "type": "string"
+            },
+            "fingerprint": {
+              "type": "string"
+            },
+            "normalized_sha256": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
         }
       },
       "additionalProperties": false

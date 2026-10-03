@@ -20,6 +20,7 @@ export interface NormalizedEvent {
   tool_name?: string;
   call_id?: string;
   arguments?: unknown;
+  comparison_arguments?: unknown;
   is_error?: boolean | null;
   skill_name?: string;
   skill_state?: 'invoked' | 'loaded' | 'applied' | 'unknown';
@@ -39,7 +40,7 @@ export interface NormalizedSession {
   relationship: string | null;
   events: NormalizedEvent[];
   usage: Usage;
-  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]};
+  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]; observations?: {errors: UsageCoverage; skill_loads: UsageCoverage; usage_granularity: 'request' | 'session' | 'unavailable'; source_context: boolean}};
 }
 
 export interface ReportSession {
@@ -52,6 +53,7 @@ export interface ReportSession {
   relationship: string | null;
   usage: Usage;
   coverage: NormalizedSession['coverage'];
+  source?: {format:string;fingerprint:string;normalized_sha256:string};
   metrics: {tool_call_count: number; tool_error_count: number; skill_load_count: number; event_count: number};
   model_runs: Array<{model: string | null; provider: string | null}>;
   timeline: Array<{event_id: string; type: EventType; timestamp: string | null; tool_name: string | null; source_ref: string}>;
@@ -101,7 +103,9 @@ export interface Evidence {
 
 export interface Report {
   schema_version: '1.0.0';
-  report: {id: string; generated_at: string; analyzer_version: '0.1.0'; mode: 'single_session' | 'multi_session'; status: 'complete' | 'partial'; demo: boolean};
+  episodes?: TaskEpisode[];
+  provenance?: {analyzer: {version:string;revision:string|null;build_sha256:string};instructions:{skill_sha256:string;guide_sha256:string};interpretations: InterpretationProvenance[]};
+  report: {id: string; generated_at: string; analyzer_version: string; mode: 'single_session' | 'multi_session'; status: 'complete' | 'partial'; demo: boolean};
   scope: {session_ids: string[]; excluded_sessions: Array<{id: string; reason: string}>};
   coverage: {usage: UsageCoverage; limitations: string[]};
   summary: {session_count: number; tool_call_count: number; finding_count: number; input_tokens: number | null; output_tokens: number | null; total_tokens: number | null};
@@ -113,4 +117,27 @@ export interface Report {
   evidence: Evidence[];
   analysis_usage: {mode: 'metrics_only' | 'assisted'; model_tokens: number | null; notes: string[]};
   privacy: {raw_transcripts_included: false; excerpts_included: boolean; redaction_applied: boolean; safe_to_share: null};
+}
+
+export interface InterpretationProvenance {
+  model:string|null;
+  instruction_sha256:string|null;
+  packet_sha256:string|null;
+  max_chars:number|null;
+  context_event_ids:string[];
+  model_tokens:number|null;
+}
+
+export interface TaskEpisode {
+  request_kind?:'task'|'analyzer'|'control'|'unknown';
+  id:string;
+  session_id:string;
+  request_evidence_id:string|null;
+  action_evidence_ids:string[];
+  correction_evidence_ids:string[];
+  verification_evidence_ids:string[];
+  evidence_ids:string[];
+  boundary:'request'|'partial';
+  limitations:string[];
+  outcome:{state:'unknown'|'claimed_complete'|'verified'|'failed'|'blocked';basis:'unassessed'|'assistant_claim'|'reviewer_assessment';criteria:string|null;evidence_ids:string[];reviewer:string|null};
 }

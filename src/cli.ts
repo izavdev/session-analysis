@@ -2,19 +2,37 @@
 import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {assessWorkflows} from './workflows.js';
+import type {ExistingSkill} from './workflows.js';
+import {analyzeFeedback,compareTrial} from './feedback-analysis.js';
+import type {ReviewedSample,Trial} from './feedback-analysis.js';
+import {createFeedback,feedbackDraft,appendFeedback,validateFeedback} from './feedback.js';
+import type {FeedbackFile,FeedbackEntry} from './feedback.js';
+import {reviewOutcome} from './episodes.js';
+import {BUILD} from './build-info.js';
+import type {InterpretationProvenance} from './types.js';
 import {discover, loadSessions} from './adapters.js';
-import {analyze, evidencePacket, mergeInterpretation} from './core.js';
+import {analyze, evidencePacket, mergeInterpretation, selectContext} from './core.js';
 import {renderHtml} from './export.js';
 import {validateReport} from './validation.js';
 import type {AgentName} from './types.js';
 
 const HELP = `Session Analysis — local-first diagnostics (no network or model calls)
 Usage: session-analysis <command> [options]
-Commands: discover, analyze, validate, packet, merge, export
+Commands: discover, analyze, validate, packet, context, outcome, feedback-template, feedback-add, feedback-validate, feedback-export, feedback-analyze, trial, workflows, merge, export
   discover [--agent all|claude_code|codex|hermes] [--root DIRECTORY]
   analyze FILE_OR_DIR... -o REPORT.json [--agent auto|claude_code|codex|hermes] [--session-id AGENT:ID] [--include-excerpts]
   validate REPORT.json
   packet REPORT.json -o PACKET.json [--max-chars 12000]
+  context REPORT.json SOURCE --event-id AGENT:SESSION:EVENT -o CONTEXT.json [--include-excerpts]
+  workflows REPORT.json GROUPS.json -o REVIEWED.json [--feedback FEEDBACK.json] [--existing-skills SELECTED_METADATA.json]
+  feedback-analyze SELECTED_SAMPLES.json -o SUMMARY.json
+  trial BASELINE.json FOLLOWUP.json TRIAL.json -o COMPARISON.json
+  feedback-template REPORT.json -o FEEDBACK.json [--recommendation-id ID]
+  feedback-add REPORT.json FEEDBACK.json ENTRY.json -o UPDATED.json
+  feedback-validate REPORT.json FEEDBACK.json
+  feedback-export REPORT.json FEEDBACK.json -o COPY.json
+  outcome CONTEXT.json REVIEW.json -o REVIEWED.json
   merge REPORT.json INTERPRETATION.json -o ASSISTED.json
   export REPORT.json -o REPORT.html
 `;
@@ -22,7 +40,7 @@ Commands: discover, analyze, validate, packet, merge, export
 interface Parsed {positionals: string[]; options: Map<string, string[]>; switches: Set<string>}
 function parse(rest: string[]): Parsed {
   const result: Parsed = {positionals: [], options: new Map(), switches: new Set()};
-  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars']);
+  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id','--interpretation-metadata','--recommendation-id','--feedback','--existing-skills']);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (valued.has(part)) {
@@ -90,7 +108,7 @@ export function main(argv: string[] = process.argv.slice(2)): number {
   try {
     const [command, ...args] = argv;
     if (!command || command === '--help' || command === '-h') { console.log(HELP); return 0; }
-    if (command === '--version') { console.log('0.2.0'); return 0; }
+    if (command === '--version') { console.log(BUILD.version); return 0; }
     const parsed = parse(args);
     if (command === 'discover') {
       requireCount(parsed.positionals, 0, command);
@@ -112,8 +130,27 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       const report = analyze(chosen, parsed.switches.has('--include-excerpts'));
       validateReport(report);
       writeOutput(dest, report);
-    } else if (['validate', 'packet', 'merge', 'export'].includes(command)) {
-      requireCount(parsed.positionals, command === 'merge' ? 2 : 1, command);
+    } else if(command==='workflows') {
+      requireCount(parsed.positionals,2,command);const report=readJson(parsed.positionals[0]!);validateReport(report);
+      const feedbackPath=option(parsed,'--feedback'),skillsPath=option(parsed,'--existing-skills');const inputs=[...parsed.positionals,...(feedbackPath?[feedbackPath]:[]),...(skillsPath?[skillsPath]:[])];const dest=output(parsed);ensureDistinct(dest,inputs);
+      const existing=skillsPath?readJson(skillsPath):[];if(!Array.isArray(existing))throw new Error('Expected explicitly selected skill metadata list');
+      writeOutput(dest,assessWorkflows(report,readJson(parsed.positionals[1]!),feedbackPath?readJson(feedbackPath) as FeedbackFile:undefined,existing as ExistingSkill[]));
+    } else if(command==='feedback-analyze') {
+      requireCount(parsed.positionals,1,command);const selected=readJson(parsed.positionals[0]!) as {samples:ReviewedSample[];opportunities?:Array<{id:string;found:boolean|null}>};
+      if(!selected||!Array.isArray(selected.samples))throw new Error('Expected explicitly selected report/feedback samples');const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,analyzeFeedback(selected.samples,selected.opportunities));
+    } else if(command==='trial') {
+      requireCount(parsed.positionals,3,command);const baseline=readJson(parsed.positionals[0]!);const followup=readJson(parsed.positionals[1]!);validateReport(baseline);validateReport(followup);const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,compareTrial(baseline,followup,readJson(parsed.positionals[2]!) as Trial));
+    } else if (command.startsWith('feedback-')) {
+      const count=command==='feedback-template'?1:command==='feedback-add'?3:2;requireCount(parsed.positionals,count,command);
+      const report=readJson(parsed.positionals[0]!);validateReport(report);
+      let file:unknown=command==='feedback-template'?createFeedback(report):readJson(parsed.positionals[1]!);
+      validateFeedback(report,file);
+      if(command==='feedback-add') file=appendFeedback(report,file,readJson(parsed.positionals[2]!) as FeedbackEntry);
+      if(command==='feedback-validate') console.log('Valid feedback');
+      else if(['feedback-template','feedback-add','feedback-export'].includes(command)){const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,command==='feedback-template'&&option(parsed,'--recommendation-id')?feedbackDraft(report,option(parsed,'--recommendation-id')!):file);}
+      else throw new Error('Unknown feedback command');
+    } else if (['validate', 'packet', 'context', 'outcome', 'merge', 'export'].includes(command)) {
+      requireCount(parsed.positionals, ['merge','context','outcome'].includes(command) ? 2 : 1, command);
       const source = parsed.positionals[0]!;
       const dest = command === 'validate' ? undefined : output(parsed);
       if (dest) ensureDistinct(dest, parsed.positionals);
@@ -124,9 +161,17 @@ export function main(argv: string[] = process.argv.slice(2)): number {
         const limitText = option(parsed, '--max-chars', '12000')!;
         const limit = Number(limitText);
         if (!Number.isSafeInteger(limit)) throw new Error('--max-chars must be an integer');
-        writeOutput(dest!, evidencePacket(report, limit), true);
+        writeOutput(dest!, evidencePacket(report, limit, {finding_ids:parsed.options.get('--finding-id'),session_ids:parsed.options.get('--session-id')}), true);
+      } else if (command === 'context') {
+        const sessions=loadSessions(parsed.positionals[1]!);
+        const ids=parsed.options.get('--event-id')??[];
+        const matches=sessions.filter(s=>ids.every(id=>id.startsWith(s.agent+':'+s.id+':')));
+        if(matches.length!==1) throw new Error('Select events from exactly one source session');
+        writeOutput(dest!,selectContext(report,matches[0]!,ids,parsed.switches.has('--include-excerpts')));
+      } else if (command === 'outcome') {
+        writeOutput(dest!,reviewOutcome(report,readJson(parsed.positionals[1]!)));
       } else if (command === 'merge') {
-        const merged = mergeInterpretation(report, readJson(parsed.positionals[1]!));
+        const merged = mergeInterpretation(report, readJson(parsed.positionals[1]!),option(parsed,'--interpretation-metadata')?readJson(option(parsed,'--interpretation-metadata')!) as InterpretationProvenance:undefined);
         validateReport(merged);
         writeOutput(dest!, merged);
       } else writeOutput(dest!, renderHtml(report));

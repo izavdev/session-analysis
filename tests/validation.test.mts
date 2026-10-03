@@ -21,7 +21,7 @@ function invalid(change:(r:Report)=>void):void {const r=structuredClone(report()
 test('generated report matches schema root and validates',()=>{
   const r=report(); assert.equal(validateReport(r),undefined);
   const schema=JSON.parse(readFileSync(new URL('../schemas/report.schema.json',import.meta.url),'utf8'));
-  assert.deepEqual(new Set(Object.keys(r)),new Set(schema.required)); assert.equal(schema.properties.schema_version.const,'1.0.0');
+  assert.ok(schema.required.every((key:string)=>Object.hasOwn(r,key)));assert.ok(Object.keys(r).every(key=>Object.hasOwn(schema.properties,key))); assert.equal(schema.properties.schema_version.const,'1.0.0');
 });
 
 test('rejects unexpected fields, invalid timestamps, versions, enums, counts, and null contradictions',()=>{

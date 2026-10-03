@@ -1,0 +1,181 @@
+{
+  "model": "GPT-6 (invoking Codex agent; exact runtime revision unavailable)",
+  "executed_at": "2026-10-03",
+  "revision": "056668d7c16ea4a8a88af4651966a56ddd95eddb",
+  "skill_sha256": "bf5b46f101c6252d9d0a4d95b755190245f8debfdb5d2d4d842e14f7211bf7a5",
+  "guide_sha256": "06b7bc0e25c92f0881aa5842956fcf4f38ddf6c714f34f6112d87eda6fb0e959",
+  "review_method": "Same-agent self-review on four selected contextual packets; not independent or blinded. No user intervention trial.",
+  "outputs": [
+    {
+      "case_id": "supported-search",
+      "input_sha256": "0ecf3614ebcfb7a3169e70dc15c8309bd05fd1430ae988df01d36d42fb5f77cc",
+      "packet_sha256": "46a06da67a289734a0aab084a18eaed9751595ce91bd4e2058241f313681de8d",
+      "response": "The request needed one exported symbol. The initial whole-file output omitted it; the later exact-symbol search returned the definition. Start with that search for this task type, then inspect the bounded definition and expand if uniqueness or references remain unclear. Whole-file audits still need full input. Test against the known definition and multiple-match cases. Benefit is a hypothesis; no savings were measured.",
+      "interpretation": {
+        "findings": [
+          {
+            "id": "context:supported-search",
+            "category": "workflow_efficiency",
+            "rule_id": "contextual_review",
+            "title": "Use the named-symbol lookup first",
+            "severity": "low",
+            "claim_type": "inferred",
+            "confidence": "medium",
+            "session_ids": [
+              "codex:supported-search"
+            ],
+            "evidence_ids": [
+              "evidence:df52e5de46fcdb88ec62",
+              "evidence:79f24aff5b1e8e67845b",
+              "evidence:6af2983c976367962531",
+              "evidence:25570e306ec580e34a8e",
+              "evidence:4989a0d294757c2908a4",
+              "evidence:e395a0e06b8483007b05",
+              "evidence:a61cde2a57dd4daf65ca"
+            ],
+            "observation": "The request asks for parseHeader; an initial read is followed by an explicit strategy correction and a search returning its definition.",
+            "interpretation": "Exact symbol search fits this narrow lookup. Full input may be necessary for broader audits; the supplied output is truncated and completion is an assistant claim.",
+            "recommendation_ids": [
+              "advice:supported-search"
+            ]
+          }
+        ],
+        "recommendations": [
+          {
+            "id": "advice:supported-search",
+            "title": "Start with exact symbol search",
+            "action": "For a single named-symbol lookup, start with exact symbol search in the selected file, inspect its definition and check for multiple matches. Expand when ambiguity or requested context requires it. Test against a known definition and duplicate-name examples; no time/token savings have been measured.",
+            "kind": "workflow",
+            "priority": "low",
+            "finding_ids": [
+              "context:supported-search"
+            ],
+            "overlap_group": null
+          }
+        ],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 4,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Specific contextual change with applicability, uncertainty and correctness test. Same-agent review cannot establish user usefulness."
+        }
+      ]
+    },
+    {
+      "case_id": "ordinary-correction",
+      "input_sha256": "4f0b76f626681a0dc592a6ff1319d5f888425dc5ab02f13bf36663ab2187da80",
+      "packet_sha256": "4abd488b2618f4616d5da6fa71506570e1886da431349a96a0cee38463196367",
+      "response": "The user requested JSON, but the first answer was YAML-like text and required a correction. Before responding to explicit JSON requests, parse the proposed output and check the requested keys. The final JSON appears to fix the format; broader correctness is unknown. Test parseability, both keys and value preservation. This addresses one observed format mismatch, not every correction.",
+      "interpretation": {
+        "findings": [
+          {
+            "id": "context:ordinary-correction",
+            "category": "workflow_efficiency",
+            "rule_id": "contextual_review",
+            "title": "Validate the requested JSON format",
+            "severity": "low",
+            "claim_type": "inferred",
+            "confidence": "medium",
+            "session_ids": [
+              "codex:ordinary-correction"
+            ],
+            "evidence_ids": [
+              "evidence:a86025c9ac5f84de1879",
+              "evidence:223ca74343e52f148431",
+              "evidence:6705bd1c60347e8f7093",
+              "evidence:e3c38d93841e501118e1"
+            ],
+            "observation": "The user requested JSON with name and age. The first answer was not JSON, the user corrected it, and the next answer used JSON.",
+            "interpretation": "The explicit format requirement supports a pre-response format check. The supplied example does not establish all value semantics or measured benefit.",
+            "recommendation_ids": [
+              "advice:ordinary-correction"
+            ]
+          }
+        ],
+        "recommendations": [
+          {
+            "id": "advice:ordinary-correction",
+            "title": "Check JSON format before responding",
+            "action": "For explicit JSON-only requests, validate that the proposed answer parses as JSON and includes the requested name and age keys before sending. Verify value preservation and required types on comparable examples. Do not impose JSON on ordinary prose requests; benefit is unmeasured.",
+            "kind": "workflow",
+            "priority": "low",
+            "finding_ids": [
+              "context:ordinary-correction"
+            ],
+            "overlap_group": null
+          }
+        ],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 4,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Specific contextual change with applicability, uncertainty and correctness test. Same-agent review cannot establish user usefulness."
+        }
+      ]
+    },
+    {
+      "case_id": "same-retries",
+      "input_sha256": "6dab6e5a69b8e8d8eaa1c06397fd05b8dc1f585ae075bcf9aae5e807528a62a4",
+      "packet_sha256": "ce10542299c3dc63766a1aa98dd9df16c38dcddda148332202b05749f7485672",
+      "response": "One review episode includes three failed reads, source generation and a later passing test. The changed strategy and candidate verification resolve the local recovery question; full task completion is unassessed. Generating first might help, but whether waiting or retrying was necessary is unknown. No specific recommendation is justified.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Necessary activity/recovery is explained without unsupported advice or verified-task claims."
+        }
+      ]
+    },
+    {
+      "case_id": "necessary-read",
+      "input_sha256": "b2b3230ce30d0d3db2fc6897017d03bee4ae1a35c33edea5cf2fb854503a8e45",
+      "packet_sha256": "ddce0e8a61cb707c09f47b27f5ecd0521bfe6fef35ce007ff9454738b719b105",
+      "response": "The request requires auditing every configuration entry, so the whole-file read fits the requested task. The 12,600 characters are activity. The final answer claims completion, but independent outcome verification is absent and the context excerpt is truncated. No supported improvement or skill candidate; no token/cost savings were measured.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Necessary activity/recovery is explained without unsupported advice or verified-task claims."
+        }
+      ]
+    }
+  ]
+}

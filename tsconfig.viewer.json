@@ -12,7 +12,8 @@
       "ES2022",
       "DOM"
     ],
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "src/web/app.ts"

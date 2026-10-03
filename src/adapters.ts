@@ -43,14 +43,32 @@ function finish(s: NormalizedSession, records: Usage[]): NormalizedSession {
   }
   return s;
 }
+function structuredArguments(args:unknown):unknown {
+  if(typeof args==='string') {try {const value:unknown=JSON.parse(args);if(isObject(value)) return value;} catch {/* Preserve arbitrary shell/custom strings. */}}
+  return args;
+}
+function observe(s:NormalizedSession):NormalizedSession {
+  for(const skill of [...s.events].filter(e=>e.type==='skill'&&e.skill_state==='invoked')) {
+    const calls=s.events.filter(e=>e.type==='tool_call'&&e.call_id===skill.call_id),results=s.events.filter(e=>e.type==='tool_result'&&e.call_id===skill.call_id);
+    if(skill.call_id&&calls.length===1&&results.length===1&&results[0]!.is_error===false) {
+      const result=results[0]!;add(s,'skill',result.source_ref,result.timestamp,'',{skill_name:skill.skill_name,skill_state:'loaded',call_id:skill.call_id});
+    }
+  }
+  const results=s.events.filter(e=>e.type==='tool_result'),calls=s.events.filter(e=>e.type==='tool_call');
+  const explicit=results.filter(e=>typeof e.is_error==='boolean');
+  const complete=calls.every(c=>c.call_id&&calls.filter(x=>x.call_id===c.call_id).length===1&&results.filter(x=>x.call_id===c.call_id).length===1&&results.find(x=>x.call_id===c.call_id)?.is_error!=null);
+  const errors=calls.length===0?'unavailable':complete?'reported':explicit.length?'partial':'unavailable';
+  s.coverage.observations={errors,skill_loads:errors,usage_granularity:s.coverage.usage==='unavailable'?'unavailable':s.source.format==='claude-jsonl'||s.source.format==='codex-exec-jsonl'?'request':'session',source_context:['claude-jsonl','codex-rollout-jsonl'].includes(s.source.format)};
+  return s;
+}
 function tool(s:NormalizedSession,ref:string,when:unknown,name:unknown,id:unknown,args:unknown,extra:Partial<NormalizedEvent>={}):void {
   const toolName=str(name) ?? 'unknown';
-  add(s,'tool_call',ref,when,'',{tool_name:toolName,call_id:str(id) ?? undefined,arguments:args,...extra});
+  add(s,'tool_call',ref,when,'',{tool_name:toolName,call_id:str(id) ?? undefined,arguments:args,comparison_arguments:structuredArguments(args),...extra});
   let parsed=args;
   if(typeof parsed==='string') {try{parsed=JSON.parse(parsed);}catch{return;}}
   if(!isObject(parsed))return;
-  let skill:unknown, state:'invoked'|'loaded'='loaded';
-  if(toolName==='Skill'||toolName==='skill_view') {skill=parsed.skill ?? parsed.name;state=toolName==='Skill'?'invoked':'loaded';}
+  let skill:unknown, state:'invoked'='invoked';
+  if(toolName==='Skill'||toolName==='skill_view') {skill=parsed.skill ?? parsed.name;state='invoked';}
   else if(toolName==='Read'||toolName==='read_file') {
     const path=parsed.file_path ?? parsed.path;
     if(typeof path==='string' && basename(path)==='SKILL.md') skill=basename(dirname(path));
@@ -142,8 +160,8 @@ function codex(rows:Row[],fingerprint:string):NormalizedSession {
       if(kind==='message' && (p.role==='user'||p.role==='assistant')){
         const content=Array.isArray(p.content)?p.content:[];
         add(s,p.role,ref,when,content.map(b=>str(obj(b).text) ?? '').join('\n'),{model,provider});
-      }else if(kind==='function_call'||kind==='custom_tool_call')tool(s,ref,when,p.name,id,p.arguments ?? p.input ?? '',{model,provider});
-      else if(kind==='function_call_output'||kind==='custom_tool_call_output')add(s,'tool_result',ref,when,p.output ?? '',{call_id:id ?? undefined,is_error:null});
+      }else if(kind==='function_call'||kind==='custom_tool_call')tool(s,ref,when,p.name,id,p.arguments ?? p.input ?? '',{model,provider,...(kind==='custom_tool_call'?{comparison_arguments:p.input??''}:{})});
+      else if(kind==='function_call_output'||kind==='custom_tool_call_output')add(s,'tool_result',ref,when,p.output ?? '',{call_id:id ?? undefined,is_error:typeof p.is_error==='boolean'?p.is_error:typeof obj(parsed(p.output)).is_error==='boolean'?obj(parsed(p.output)).is_error as boolean:typeof obj(parsed(p.output)).exit_code==='number'?obj(parsed(p.output)).exit_code!==0:null});
       else s.coverage.limitations.push(`Unsupported Codex response item at ${ref}`);
     }else if(type==='event_msg')s.coverage.limitations.push(`Unsupported Codex event at ${ref}`);
     else if(type!=='session_meta')s.coverage.limitations.push(`Unsupported Codex record at ${ref}`);
@@ -194,7 +212,7 @@ function sqlite(path:string):NormalizedSession[]{
       // Hermes persists uncached input separately from cache reads and writes.
       out.push(finish(s,keys.some(k=>row[k]!=null)?[usage(row,true)]:[]));
     }
-    return out;
+    return out.map(observe);
   }catch(e){if(e instanceof Error && e.message.startsWith('Unsupported Hermes SQLite schema:'))throw e;throw new Error('Unable to read Hermes SQLite schema or sessions');}
   finally{db.close();}
 }
@@ -238,5 +256,5 @@ export function loadSessions(path:string,agent:AgentName|'auto'='auto'):Normaliz
   else if(rows.some(([,r])=>r.sessionId && ['user','assistant'].includes(String(r.type))) && (agent==='auto'||agent==='claude_code'))result=claude(rows,fingerprint);
   else throw new Error('Unrecognized session schema or agent mismatch');
   if(truncated)for(const s of result)s.coverage.limitations.push('Malformed final JSONL line ignored.');
-  return result;
+  return result.map(observe);
 }

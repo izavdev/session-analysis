@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit selected intervention trial 1.0.0",
+  "type": "object",
+  "required": [
+    "trial_version",
+    "id",
+    "baseline_report_sha256",
+    "followup_report_sha256",
+    "baseline_episode_id",
+    "followup_episode_id",
+    "recommendation_id",
+    "intervention",
+    "correctness_criteria",
+    "comparable",
+    "task_complexity",
+    "concurrent_changes",
+    "outcome",
+    "basis",
+    "correctness",
+    "verification_evidence_ids"
+  ],
+  "properties": {
+    "trial_version": {
+      "const": "1.0.0"
+    },
+    "id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_report_sha256": {
+      "type": "string",
+      "minLength": 1
+    },
+    "followup_report_sha256": {
+      "type": "string",
+      "minLength": 1
+    },
+    "baseline_episode_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "followup_episode_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "recommendation_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "intervention": {
+      "type": "string",
+      "minLength": 1
+    },
+    "correctness_criteria": {
+      "type": "string",
+      "minLength": 1
+    },
+    "comparable": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "task_complexity": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "concurrent_changes": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outcome": {
+      "enum": [
+        "improved",
+        "unchanged",
+        "worse",
+        "unknown"
+      ]
+    },
+    "basis": {
+      "enum": [
+        "user_report",
+        "observed_test",
+        "model_inference"
+      ]
+    },
+    "correctness": {
+      "enum": [
+        "preserved",
+        "regression",
+        "unknown"
+      ]
+    },
+    "verification_evidence_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "additionalProperties": false
+}

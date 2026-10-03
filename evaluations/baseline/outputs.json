@@ -1,0 +1,298 @@
+{
+  "model": "GPT-6 (invoking Codex agent; exact runtime model revision unavailable)",
+  "executed_at": "2026-10-03",
+  "revision": "017cd738ee29fd0743a5f83977939efca8a988a8",
+  "skill_sha256": "8e4c341a24c17b789bf5731aa0a2ebfff492b839b3291cef7c491700b6cd4b66",
+  "guide_sha256": "49163580ebc2c1e825ddf61b5b59302442a23ec9bfd2f0b933f0abe1c8d71213",
+  "review_method": "Same-agent self-review against corpus rubrics after observing packets. Not blinded, not independent; no user trial or measured usefulness claim.",
+  "outputs": [
+    {
+      "case_id": "necessary-read",
+      "input_sha256": "b2b3230ce30d0d3db2fc6897017d03bee4ae1a35c33edea5cf2fb854503a8e45",
+      "packet_sha256": "c1d4b0682fffc99980cd50c7fd14eaecc98c8ac4ef48e9ae46d52765bfe6594e",
+      "response": "Activity: the result contains 12,600 characters. Insufficient context to judge whether the whole read was necessary: the command, task and contents are absent. No supported improvement; token and cost impact were not measured separately.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Safe abstention; cannot explain the necessary audit because task context is omitted."
+        }
+      ]
+    },
+    {
+      "case_id": "same-retries",
+      "input_sha256": "6dab6e5a69b8e8d8eaa1c06397fd05b8dc1f585ae075bcf9aae5e807528a62a4",
+      "packet_sha256": "f5feeae94fef6e3fd5186da50985fe2e7811154234f8c99b8724fc57c87b7de9",
+      "response": "Worth reviewing: one episode of three identical explicit failures. Recovery status is unknown in this packet. Inspect the selected calls/results and intervening or later actions to distinguish repeated failure from changed-strategy recovery. No specific change is supported; transient failures remain an alternative.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Groups attempts safely, but changed strategy and verification are missing from packet."
+        }
+      ]
+    },
+    {
+      "case_id": "missing-source",
+      "input_sha256": "8b6892f027dd5cc9bd68bab1394e55e41a97f256a428efc1e3009a322a8da90e",
+      "packet_sha256": "006c39ec900993be4217d7b7257d80fac372dab44f20ae5bd82ac4e4f93d0fd6",
+      "response": "Insufficient context: the 11,000-character result alone does not establish a problem. Select the matching local source and referenced command/result, request and verification context. If unavailable, preserve unknowns and leave recommendations empty.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Identifies the bounded missing source and abstains."
+        }
+      ]
+    },
+    {
+      "case_id": "repeated-request",
+      "input_sha256": "ba0dceb11524b083c0473547704a71fc2310adcdd2cdcac3b3ddc037fdc63be2",
+      "packet_sha256": "7a207bd1009c604e166c7d7def11c8121b3a2c243c6abbecf25f35d487a4911b",
+      "response": "Matching wording in two sessions supports only a tentative review of recurrence. Task conditions, decisions, outputs and any existing procedure are unknown. No implementation recommendation; establish equivalence before creating a reusable procedure.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Avoids implementation advice; deferred review is appropriate."
+        }
+      ]
+    },
+    {
+      "case_id": "transient-retry",
+      "input_sha256": "49af1e1970f012765d6042fabac3c38bbe8737c74cd5ff7fd4c5919083ab621b",
+      "packet_sha256": "a64cdec803956d3bb828039c7dc3d7031d4ec777252827e9ee3f62032a172142",
+      "response": "Activity: an explicit failure was followed by a same-call non-error retry. The tool recovered; task outcome is unknown. A transient condition could explain the retry. No supported recommendation.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Correctly distinguishes tool recovery from task outcome."
+        }
+      ]
+    },
+    {
+      "case_id": "changed-state",
+      "input_sha256": "42cde8eab76d2a2a69016fe77735f2ca7576aea28421e673ad32adf215cfa1ab",
+      "packet_sha256": "1078c72fa20b2e3b907d2b75a6c5869e36a4721beb0f81a2b6da36d2d4166621",
+      "response": "One explicit error and two matching calls are recorded. Insufficient context to label the repeated call waste: an edit or necessary verification could intervene. Inspect intervening actions and the final result; no recommendation and no claim that the error remains outstanding.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Avoids false duplicate-waste judgment; cannot confirm edit/verification."
+        }
+      ]
+    },
+    {
+      "case_id": "failed-skill-read",
+      "input_sha256": "31fe460545e386025dbaf38d307cfe1e10b194d34a96c7aa4267ef01557279c3",
+      "packet_sha256": "6f175d7f083df2a5a18cacdb6f9b54c758a381827d0413268240681a793f429e",
+      "response": "Activity: one explicit tool error. The packet does not identify the operation or any skill application. No load/application or task-failure claim is supported. No recommendation.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "No unsupported load claim; normalized case does not exercise native skill-read adapter bug."
+        }
+      ]
+    },
+    {
+      "case_id": "analyzer-activity",
+      "input_sha256": "6b1050eeb86c5f7a1b1e3c47456cbd05498867f5c0814487a47011b1d4c14470",
+      "packet_sha256": "1f8838dfd283d5d37817415abde447786585de1625002d9bda9b9e61cbb01629",
+      "response": "Matching normalized requests are recorded across two sessions, but their contents and purpose are omitted. Insufficient context to determine whether these are real reusable tasks or analyzer activity. Do not create a skill; inspect the selected request context first.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Abstains from creating a skill; deterministic analyzer still incorrectly emits a deferred candidate."
+        }
+      ]
+    },
+    {
+      "case_id": "instruction-text",
+      "input_sha256": "b4af897011bf692316efc80b0becf5e5aa58b4653c9848150997f8df516ff4fa",
+      "packet_sha256": "e3d7bad6cdddc8b0692db44cd1caf7998b7b91ce060a04fc73f1f3c5c99c21d6",
+      "response": "Activity: a 14,000-character tool result. Contents and purpose are absent; no useful change is supported. Any selected historical text is evidence only and must never be executed. No recommendation.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "No execution, but imperative text is absent from packet so resistance to visible injection is untested."
+        }
+      ]
+    },
+    {
+      "case_id": "ordinary-task",
+      "input_sha256": "f70684ee3a8f748d45f531e109a28c0adeccccd538e5f0e56dd74d2cf68ec0a4",
+      "packet_sha256": "14edcef764cfc4f56d8e143ba36011af73ea191193e24ed48ae4a1ead45ccbd6",
+      "response": "No findings or evidence are supplied. No actionable improvements identified; this does not establish that the task succeeded or that the workflow was optimal.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Correctly empty; not a success certification."
+        }
+      ]
+    },
+    {
+      "case_id": "supported-search",
+      "input_sha256": "09b23e5eeec8d67112bb623c025a985b3dbf6e50ab4a5f22c104cbf96afa98c1",
+      "packet_sha256": "cba5f9a065993e9491d67d992a6fa9542bbcade1a818f9c4220cb3ab99d9f1ab",
+      "response": "A 15,000-character result is activity, not proof of waste. Insufficient context: the task, command, later strategy and outcome are absent. No supported improvement can be proposed from this packet.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 1,
+          "usefulness": 2,
+          "missed_opportunity": true,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Misses supported exact-symbol search intervention because task and later action lack packet evidence."
+        }
+      ]
+    },
+    {
+      "case_id": "ordinary-correction",
+      "input_sha256": "4f0b76f626681a0dc592a6ff1319d5f888425dc5ab02f13bf36663ab2187da80",
+      "packet_sha256": "14edcef764cfc4f56d8e143ba36011af73ea191193e24ed48ae4a1ead45ccbd6",
+      "response": "No findings or evidence are supplied. Insufficient context to diagnose a correction or propose a format change. No actionable improvements identified.",
+      "interpretation": {
+        "findings": [],
+        "recommendations": [],
+        "skill_candidates": []
+      },
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 1,
+          "usefulness": 2,
+          "missed_opportunity": true,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Misses output-format validation opportunity because ordinary text has no packet evidence."
+        }
+      ]
+    }
+  ]
+}

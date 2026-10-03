@@ -311,7 +311,7 @@ test('local file viewer boots its compiled script and the demo button renders',(
   const doc=documentFixture();
   const browserWindow={document:{...doc,readyState:'complete'}};
   const browserScript=readFileSync(fileURLToPath(new URL('../web/app.js',import.meta.url)),'utf8');
-  runInNewContext(browserScript,{window:browserWindow,TextEncoder,Event},{filename:'web/app.js'});
+  runInNewContext(browserScript,{structuredClone,window:browserWindow,TextEncoder,Event},{filename:'web/app.js'});
   assert.match(html,/<script(?: defer)? src="app\.js"><\/script>/);
   doc.elements['demo-button'].dispatch('click');
   assert.equal(doc.elements['report-view'].hidden,false);
@@ -468,4 +468,18 @@ test('clickable paths copy platform-specific locations and platform override upd
   assert.equal(copied,'~/.codex/sessions/');
   doc.elements['platform-select'].value='mac';doc.elements['platform-select'].dispatch('change');
   assert.match(doc.elements['source-help'].textContent,/macOS:.*⌘⇧G/s);
+});
+
+test('viewer records decisions independently of attempts and renders reviewer comments as text',()=>{
+  const run=JSON.parse(readFileSync(new URL('../evaluations/contextual/run.json',import.meta.url),'utf8'));
+  const outputs=JSON.parse(readFileSync(new URL('../evaluations/contextual/outputs.json',import.meta.url),'utf8'));
+  const r=run.cases.find(c=>c.id==='ordinary-correction').report;
+  const additions=outputs.outputs.find(c=>c.case_id==='ordinary-correction').interpretation;
+  r.findings.push(...additions.findings);r.recommendations.push(...additions.recommendations);r.summary.finding_count=r.findings.length;
+  const before=JSON.stringify(r),doc=documentFixture();renderReport(r,doc as unknown as Document);
+  const selects=doc.elements.recommendations.querySelectorAll('select'),text=doc.elements.recommendations.querySelectorAll('textarea');
+  selects[0].value='accept';selects[3].value='4';text[1].value='<script>reviewer reason</script>';
+  doc.elements.recommendations.querySelectorAll('button').find(e=>e.textContent==='Save feedback in this workspace').dispatch('click');
+  assert.match(doc.elements.recommendations.textContent,/accept; usefulness 4; not_attempted; follow-up missing/);assert.match(doc.elements.recommendations.textContent,/<script>reviewer reason<\/script>/);
+  assert.equal(doc.elements.recommendations.querySelectorAll('script').length,0);assert.equal(JSON.stringify(r),before);
 });

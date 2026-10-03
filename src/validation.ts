@@ -22,7 +22,8 @@ function usage(v:unknown,path:string):void {const x=obj(v,usageFields,path);for(
 
 /** Validate report 1.0.0 including references and privacy invariants; never echo untrusted data in errors. */
 export function validateReport(value:unknown):asserts value is Report {
-  const r=obj(value,['schema_version','report','scope','coverage','summary','sessions','metrics','findings','recommendations','skill_candidates','evidence','analysis_usage','privacy'],'root');
+  const rootFields=['schema_version','report','scope','coverage','summary','sessions','metrics','findings','recommendations','skill_candidates','evidence','analysis_usage','privacy'];if(value&&typeof value==='object'&&Object.hasOwn(value,'provenance')) rootFields.push('provenance');if(value&&typeof value==='object'&&Object.hasOwn(value,'episodes')) rootFields.push('episodes');
+  const r=obj(value,rootFields,'root');
   en(r.schema_version,['1.0.0'],'schema_version');
   const meta=obj(r.report,['id','generated_at','analyzer_version','mode','status','demo'],'report');
   str(meta.id,'report.id');str(meta.generated_at,'report.generated_at');
@@ -32,7 +33,7 @@ export function validateReport(value:unknown):asserts value is Report {
   const [year,month,day,hour,minute,second]=match.slice(1,7).map(Number);
   const calendar=new Date(Date.UTC(year!,month!-1,day!));
   if(calendar.getUTCFullYear()!==year||calendar.getUTCMonth()+1!==month||calendar.getUTCDate()!==day||hour!>23||minute!>59||second!>59||Number(match[8]??0)>23||Number(match[9]??0)>59) fail('report.generated_at');
-  en(meta.analyzer_version,['0.1.0'],'report.analyzer_version');en(meta.mode,['single_session','multi_session'],'report.mode');en(meta.status,['complete','partial'],'report.status');if(typeof meta.demo!=='boolean') fail('report.demo');
+  str(meta.analyzer_version,'report.analyzer_version');if(!/^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(meta.analyzer_version as string)) fail('report.analyzer_version');en(meta.mode,['single_session','multi_session'],'report.mode');en(meta.status,['complete','partial'],'report.status');if(typeof meta.demo!=='boolean') fail('report.demo');
   const scope=obj(r.scope,['session_ids','excluded_sessions'],'scope');const scoped=strings(scope.session_ids,'scope.session_ids');
   for(const x of arr(scope.excluded_sessions,'scope.excluded_sessions')) {const item=obj(x,['id','reason'],'excluded session');str(item.id,'excluded.id');str(item.reason,'excluded.reason');}
   const cov=obj(r.coverage,['usage','limitations'],'coverage');en(cov.usage,coverage,'coverage.usage');strings(cov.limitations,'coverage.limitations');
@@ -41,10 +42,12 @@ export function validateReport(value:unknown):asserts value is Report {
   for(const k of ['input_tokens','output_tokens','total_tokens']) nullable(sum[k],count,'summary.'+k);
   const sessions=arr(r.sessions,'sessions');
   for(const x of sessions) {
-    const s=obj(x,['id','agent','agent_version','started_at','ended_at','parent_id','relationship','usage','coverage','metrics','model_runs','timeline'],'session');
+    const sessionFields=['id','agent','agent_version','started_at','ended_at','parent_id','relationship','usage','coverage','metrics','model_runs','timeline'];if(x&&typeof x==='object'&&Object.hasOwn(x,'source')) sessionFields.push('source');const s=obj(x,sessionFields,'session');
+    if(s.source!==undefined){const source=obj(s.source,['format','fingerprint','normalized_sha256'],'session.source');for(const k of Object.keys(source)) str(source[k],'session.source.'+k);}
     str(s.id,'session.id');en(s.agent,['codex','claude_code','hermes'],'session.agent');
     for(const k of ['agent_version','started_at','ended_at','parent_id','relationship']) nullable(s[k],str,'session.'+k);
-    usage(s.usage,'session.usage');const c=obj(s.coverage,['usage','tools','limitations'],'session.coverage');
+    usage(s.usage,'session.usage');const fields=['usage','tools','limitations'];if(s.coverage&&typeof s.coverage==='object'&&Object.hasOwn(s.coverage,'observations')) fields.push('observations');const c=obj(s.coverage,fields,'session.coverage');
+    if(c.observations!==undefined){const o=obj(c.observations,['errors','skill_loads','usage_granularity','source_context'],'observations');en(o.errors,coverage,'observations.errors');en(o.skill_loads,coverage,'observations.skill_loads');en(o.usage_granularity,['request','session','unavailable'],'observations.usage_granularity');if(typeof o.source_context!=='boolean') fail('observations.source_context');}
     en(c.usage,coverage,'session.coverage.usage');en(c.tools,['observed','unavailable'],'session.coverage.tools');strings(c.limitations,'session.coverage.limitations');
     const m=obj(s.metrics,['tool_call_count','tool_error_count','skill_load_count','event_count'],'session.metrics');for(const k of Object.keys(m)) count(m[k],'session.metrics.'+k);
     for(const x of arr(s.model_runs,'model_runs')) {const run=obj(x,['model','provider'],'model_run');nullable(run.model,str,'model_run.model');nullable(run.provider,str,'model_run.provider');}
@@ -73,6 +76,15 @@ export function validateReport(value:unknown):asserts value is Report {
   for(const x of recommendations) {const rec=obj(x,['id','title','action','kind','priority','finding_ids','overlap_group'],'recommendation');for(const k of ['id','title','action']) str(rec[k],'recommendation.'+k);en(rec.kind,['skill','script','template','instruction','workflow','investigate'],'recommendation.kind');en(rec.priority,['low','medium','high'],'recommendation.priority');refs(rec.finding_ids,finds,'recommendation.finding_ids');nullable(rec.overlap_group,str,'recommendation.overlap_group');}
   for(const x of candidates) {const c=obj(x,['id','title','trigger','session_ids','evidence_ids','recommendation','rationale','acceptance_tests'],'candidate');for(const k of ['id','title','trigger','rationale']) str(c[k],'candidate.'+k);const ss=refs(c.session_ids,sids,'candidate.session_ids'),ee=refs(c.evidence_ids,evids,'candidate.evidence_ids');if(ee.some(id=>!ss.includes(evidenceSessions.get(id)!))) fail('candidate evidence session mismatch');en(c.recommendation,['create','extend','merge','defer'],'candidate.recommendation');strings(c.acceptance_tests,'candidate.acceptance_tests');}
   const analysis=obj(r.analysis_usage,['mode','model_tokens','notes'],'analysis_usage');en(analysis.mode,['metrics_only','assisted'],'analysis_usage.mode');nullable(analysis.model_tokens,count,'analysis_usage.model_tokens');strings(analysis.notes,'analysis_usage.notes');
+  if(r.provenance!==undefined){
+    const p=obj(r.provenance,['analyzer','instructions','interpretations'],'provenance');const a=obj(p.analyzer,['version','revision','build_sha256'],'provenance.analyzer');str(a.version,'analyzer.version');if(a.version!==meta.analyzer_version) fail('analyzer.version');nullable(a.revision,str,'analyzer.revision');str(a.build_sha256,'analyzer.build');
+    const instructions=obj(p.instructions,['skill_sha256','guide_sha256'],'provenance.instructions');for(const k of Object.keys(instructions)) str(instructions[k],'instructions');
+    for(const item of arr(p.interpretations,'interpretations')){const i=obj(item,['model','instruction_sha256','packet_sha256','max_chars','context_event_ids','model_tokens'],'interpretation provenance');for(const k of ['model','instruction_sha256','packet_sha256']) nullable(i[k],str,k);nullable(i.max_chars,count,'max_chars');nullable(i.model_tokens,count,'model_tokens');const eventIds=new Set(sessions.flatMap(s=>(s as Report['sessions'][number]).timeline.map(e=>e.event_id)));refs(i.context_event_ids,eventIds,'context_event_ids');}
+  }
+  if(r.episodes!==undefined){
+    const episodes=arr(r.episodes,'episodes');unique(episodes,'episodes');
+    for(const entry of episodes){const episodeFields=['id','session_id','request_evidence_id','action_evidence_ids','correction_evidence_ids','verification_evidence_ids','evidence_ids','boundary','limitations','outcome'];if(entry&&typeof entry==='object'&&Object.hasOwn(entry,'request_kind'))episodeFields.push('request_kind');const e=obj(entry,episodeFields,'episode');if(e.request_kind!==undefined)en(e.request_kind,['task','analyzer','control','unknown'],'episode.request_kind');str(e.id,'episode.id');if(!sids.has(e.session_id as string)) fail('episode.session_id');const ee=refs(e.evidence_ids,evids,'episode.evidence_ids');if(!ee.length||ee.some(id=>evidenceSessions.get(id)!==e.session_id)) fail('episode evidence');const ids=new Set(ee);nullable(e.request_evidence_id,(id,p)=>{if(!ids.has(id as string)) fail(p);},'episode.request');for(const k of ['action_evidence_ids','correction_evidence_ids','verification_evidence_ids']) refs(e[k],ids,k);en(e.boundary,['request','partial'],'episode.boundary');strings(e.limitations,'episode.limitations');const o=obj(e.outcome,['state','basis','criteria','evidence_ids','reviewer'],'episode.outcome');en(o.state,['unknown','claimed_complete','verified','failed','blocked'],'outcome.state');en(o.basis,['unassessed','assistant_claim','reviewer_assessment'],'outcome.basis');nullable(o.criteria,str,'outcome.criteria');nullable(o.reviewer,str,'outcome.reviewer');const support=refs(o.evidence_ids,ids,'outcome.evidence');if(o.state==='verified'&&(o.basis!=='reviewer_assessment'||!o.criteria||!o.reviewer||!support.some(id=>(e.verification_evidence_ids as string[]).includes(id)))) fail('verified outcome');}
+  }
   const privacy=obj(r.privacy,['raw_transcripts_included','excerpts_included','redaction_applied','safe_to_share'],'privacy');
   if(privacy.raw_transcripts_included!==false||privacy.safe_to_share!==null||typeof privacy.excerpts_included!=='boolean'||typeof privacy.redaction_applied!=='boolean') fail('privacy');
   if(!privacy.excerpts_included&&evidence.some(x=>(x as Report['evidence'][number]).excerpt!==null)) fail('excerpts not opted in');

@@ -1,123 +1,9 @@
 /* Session Analysis — offline, read-only report viewer. */
+import {createFeedback,feedbackDraft,appendFeedback,validateFeedback,reportFingerprint} from '../feedback.ts';
+import type {FeedbackFile,FeedbackEntry} from '../feedback.ts';
 import demoData from '../../web/examples/codex-pages-report.json' with {type:'json'};
 import demoSource from './demo-source.json' with {type:'json'};
-// Viewer compiles as a standalone browser module; its type declarations mirror the shared report contract.
-type AgentName = 'claude_code' | 'codex' | 'hermes';
-type UsageCoverage = 'reported' | 'partial' | 'unavailable';
-type EventType = 'user' | 'assistant' | 'tool_call' | 'tool_result' | 'skill' | 'usage' | 'compression';
-
-interface Usage {
-  input_tokens: number | null;
-  output_tokens: number | null;
-  cache_read_tokens: number | null;
-  cache_write_tokens: number | null;
-  reasoning_tokens: number | null;
-  total_tokens: number | null;
-}
-
-interface NormalizedEvent {
-  id: string;
-  type: EventType;
-  timestamp: string | null;
-  text: string;
-  source_ref: string;
-  tool_name?: string;
-  call_id?: string;
-  arguments?: unknown;
-  is_error?: boolean | null;
-  skill_name?: string;
-  skill_state?: 'invoked' | 'loaded' | 'applied' | 'unknown';
-  model?: string | null;
-  provider?: string | null;
-  usage?: Usage;
-}
-
-interface NormalizedSession {
-  id: string;
-  agent: AgentName;
-  agent_version: string | null;
-  source: {format: string; fingerprint: string};
-  started_at: string | null;
-  ended_at: string | null;
-  parent_id: string | null;
-  relationship: string | null;
-  events: NormalizedEvent[];
-  usage: Usage;
-  coverage: {usage: UsageCoverage; tools: 'observed' | 'unavailable'; limitations: string[]};
-}
-
-interface ReportSession {
-  id: string;
-  agent: AgentName;
-  agent_version: string | null;
-  started_at: string | null;
-  ended_at: string | null;
-  parent_id: string | null;
-  relationship: string | null;
-  usage: Usage;
-  coverage: NormalizedSession['coverage'];
-  metrics: {tool_call_count: number; tool_error_count: number; skill_load_count: number; event_count: number};
-  model_runs: Array<{model: string | null; provider: string | null}>;
-  timeline: Array<{event_id: string; type: EventType; timestamp: string | null; tool_name: string | null; source_ref: string}>;
-}
-
-interface Finding {
-  id: string;
-  category: 'token_usage' | 'context_growth' | 'tool_efficiency' | 'skill_usage' | 'workflow_efficiency' | 'repeatable_tasks' | 'outcome_verification' | 'analysis_overhead';
-  rule_id: string;
-  title: string;
-  severity: 'low' | 'medium' | 'high';
-  claim_type: 'observed' | 'inferred';
-  confidence: 'low' | 'medium' | 'high';
-  session_ids: string[];
-  evidence_ids: string[];
-  observation: string;
-  interpretation: string;
-  recommendation_ids: string[];
-}
-interface Recommendation {
-  id: string;
-  title: string;
-  action: string;
-  kind: 'skill' | 'script' | 'template' | 'instruction' | 'workflow' | 'investigate';
-  priority: 'low' | 'medium' | 'high';
-  finding_ids: string[];
-  overlap_group: string | null;
-}
-interface SkillCandidate {
-  id: string;
-  title: string;
-  trigger: string;
-  session_ids: string[];
-  evidence_ids: string[];
-  recommendation: 'create' | 'extend' | 'merge' | 'defer';
-  rationale: string;
-  acceptance_tests: string[];
-}
-interface Evidence {
-  id: string;
-  session_id: string;
-  event_id: string;
-  source_ref: string;
-  description: string;
-  excerpt: string | null;
-}
-
-interface Report {
-  schema_version: '1.0.0';
-  report: {id: string; generated_at: string; analyzer_version: '0.1.0'; mode: 'single_session' | 'multi_session'; status: 'complete' | 'partial'; demo: boolean};
-  scope: {session_ids: string[]; excluded_sessions: Array<{id: string; reason: string}>};
-  coverage: {usage: UsageCoverage; limitations: string[]};
-  summary: {session_count: number; tool_call_count: number; finding_count: number; input_tokens: number | null; output_tokens: number | null; total_tokens: number | null};
-  sessions: ReportSession[];
-  metrics: {tools: Array<{name: string; calls: number; errors: number; output_chars: number}>; skills: Array<{name: string; loads: number; states: string[]}>};
-  findings: Finding[];
-  recommendations: Recommendation[];
-  skill_candidates: SkillCandidate[];
-  evidence: Evidence[];
-  analysis_usage: {mode: 'metrics_only' | 'assisted'; model_tokens: number | null; notes: string[]};
-  privacy: {raw_transcripts_included: false; excerpts_included: boolean; redaction_applied: boolean; safe_to_share: null};
-}
+import type {AgentName, UsageCoverage, EventType, Usage, NormalizedEvent, NormalizedSession, ReportSession, Finding, Recommendation, SkillCandidate, Evidence, Report} from '../types.js';
 type Obj = Record<string, any>;
 type Check = (value: any) => boolean;
 const root: Window | undefined = typeof window === 'undefined' ? undefined : window;
@@ -426,6 +312,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
     if(ids.size!==1) throw new Error('Choose a Claude Code or Codex JSONL containing one session identity.');
     return [...ids][0]!;
   }
+  const feedbackFiles=new WeakMap<Document,Map<string,FeedbackFile>>();
   const reportGenerations=new WeakMap<Document,number>();
   export function renderReport(report: Report, doc: Document | undefined = root?.document): Report {
     const errors = validateReport(report);
@@ -462,6 +349,9 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       line(card,'span',title,'eyebrow'); line(card,'strong',formatNumber(value));
     }
     const workspace=workspaceFor(doc);
+    const feedbackKey=reportFingerprint(report);
+    let feedbackMap=feedbackFiles.get(doc);if(!feedbackMap){feedbackMap=new Map();feedbackFiles.set(doc,feedbackMap);}
+    const feedbackForReport=()=>feedbackMap!.get(feedbackKey)??createFeedback(report);
     const sourcePanel=byId('source-inspector');
     const sourceFile=byId('source-file') as HTMLInputElement;
     const sourceUpload=byId('source-upload');
@@ -539,16 +429,44 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       line(box,'p',`Parent: ${session.parent_id || 'None reported'} · Relationship: ${session.relationship || 'Unavailable'}`);
       line(box,'p',`Usage: ${session.coverage.usage}; tools: ${session.coverage.tools}; input ${formatNumber(session.usage.input_tokens)}, output ${formatNumber(session.usage.output_tokens)}, total ${formatNumber(session.usage.total_tokens)}`);
       line(box,'p',`Cache read ${formatNumber(session.usage.cache_read_tokens)} · cache write ${formatNumber(session.usage.cache_write_tokens)} · reasoning ${formatNumber(session.usage.reasoning_tokens)}`);
-      line(box,'p',`Calls ${session.metrics.tool_call_count} · errors ${session.metrics.tool_error_count} · skill loads ${session.metrics.skill_load_count} · events ${session.metrics.event_count}`);
+      line(box,'p',`Calls ${session.metrics.tool_call_count} · observed errors ${session.metrics.tool_error_count} (${session.coverage.observations?.errors??'coverage unknown'}) · confirmed skill loads ${session.metrics.skill_load_count} (${session.coverage.observations?.skill_loads??'coverage unknown'}) · events ${session.metrics.event_count}`);
       session.coverage.limitations.forEach(item=>line(box,'p',`Limitation: ${item}`,'muted'));
       line(box,'h4','Models observed');
       const models=new Set(session.model_runs.filter(run=>run.model).map(run=>`${run.provider || 'Provider unavailable'} / ${run.model}`));
       models.forEach(model=>line(box,'p',model));
       if (!models.size) line(box,'p','Model not reported.','muted');
+      for(const episode of report.episodes??[]) if(episode.session_id===session.id) {
+        line(box,'h4','Task episode '+episode.id);line(box,'p',`Outcome: ${episode.outcome.state} (${episode.outcome.basis}); criteria: ${episode.outcome.criteria??'unassessed'}`);
+        line(box,'p',`Actions: ${episode.action_evidence_ids.length} · possible corrections: ${episode.correction_evidence_ids.length} · verification references: ${episode.verification_evidence_ids.length}`);
+        episode.limitations.forEach(note=>line(box,'p',note,'muted'));line(box,'p','Evidence: '+episode.evidence_ids.join(', '));
+      }
       line(box,'h4','Timeline');
       const timeline=line(box,'ol',undefined,'timeline');
       session.timeline.forEach(event=>line(timeline,'li',`${event.timestamp || 'Time unavailable'} · ${event.type}${event.tool_name ? ' · '+event.tool_name : ''} · ${event.event_id} · ${event.source_ref}`));
       placeholder(timeline,'No timeline events reported.');
+    }
+    function feedbackForm(parent:HTMLElement,rec:Recommendation) {
+      const panel=line(parent,'details',undefined,'feedback-panel');line(panel,'summary','Record local feedback');
+      const status=line(panel,'p',undefined,'muted feedback-status');status.setAttribute('role','status');
+      const show=()=>{const entries=feedbackMap!.get(feedbackKey)?.entries.filter(e=>e.recommendation_id===rec.id)??[];status.textContent=entries.length?entries.map(e=>`${e.reviewer}: ${e.review.decision}; usefulness ${e.review.usefulness??'unknown'}; ${e.attempt.state}; follow-up ${e.follow_up?.outcome??'missing'} — ${e.review.reason}`).join('\n'):'Unreviewed. Acceptance, implementation and improvement are separate.';};show();
+      const group=(parent:HTMLElement,title:string)=>{const fields=line(parent,'fieldset',undefined,'feedback-grid');line(fields,'legend',title);return fields;};
+      let fields=group(panel,'Review');
+      const input=(title:string,value='',wide=false)=>{const label=line(fields,'label',undefined,'feedback-field'+(wide?' feedback-wide':''));line(label,'span',title);const field=line(label,'textarea') as HTMLTextAreaElement;field.rows=wide?3:1;field.value=value;return field;};
+      const select=(title:string,options:string[])=>{const label=line(fields,'label',undefined,'feedback-field');line(label,'span',title);const field=line(label,'select') as HTMLSelectElement;options.forEach(value=>{const option=line(field,'option',value.replaceAll('_',' ').replace(/^./,char=>char.toUpperCase())) as HTMLOptionElement;option.value=value;});field.value=options[0]!;return field;};
+      const reviewer=input('Reviewer (anonymous allowed)','anonymous'),decision=select('Decision',['defer','accept','reject']),sufficient=select('Evidence sufficient',['unknown','yes','no']),correct=select('Factually correct',['unknown','yes','no']),rating=select('Usefulness',['unknown','1','2','3','4','5']),reason=input('Reason','',true);
+      fields=group(panel,'Implementation');
+      const attempted=select('Intervention attempt',['not_attempted','attempted','unknown']),change=input('What changed','',true),test=input('Correctness test','',true);
+      const followup=line(panel,'details',undefined,'feedback-followup');line(followup,'summary','Follow-up · optional');line(followup,'p','Fill this in after trying the suggestion.','muted');fields=group(followup,'Outcome');
+      const outcome=select('Follow-up outcome',['missing','unknown','improved','unchanged','worse']),basis=select('Follow-up evidence basis',['user_report','observed_test','model_inference']),correctness=select('Follow-up correctness',['unknown','preserved','regression']),regressions=input('Regressions','',true),effort=input('Additional effort','',true),refs=input('Follow-up evidence IDs (comma separated)','',true);
+      const actions=line(panel,'div',undefined,'feedback-actions');const save=line(actions,'button','Save feedback in this workspace','primary');save.setAttribute('type','button');line(actions,'span','Export your feedback file to keep it after closing this page.','muted');
+      save.onclick=()=>{try{
+        const file=feedbackForReport(),entry=feedbackDraft(report,rec.id);
+        const prior=file.entries.filter(e=>e.recommendation_id===rec.id&&e.reviewer===reviewer.value).at(-1);entry.supersedes=prior?.id??null;entry.reviewer=reviewer.value||'anonymous';
+        entry.review={decision:decision.value as FeedbackEntry['review']['decision'],evidence_sufficient:sufficient.value==='unknown'?null:sufficient.value==='yes',correct:correct.value==='unknown'?null:correct.value==='yes',usefulness:rating.value==='unknown'?null:Number(rating.value),reason:reason.value};
+        entry.attempt={state:attempted.value as FeedbackEntry['attempt']['state'],change:change.value,correctness_test:test.value};
+        if(outcome.value!=='missing')entry.follow_up={outcome:outcome.value as NonNullable<FeedbackEntry['follow_up']>['outcome'],basis:basis.value as NonNullable<FeedbackEntry['follow_up']>['basis'],correctness:correctness.value as NonNullable<FeedbackEntry['follow_up']>['correctness'],regressions:regressions.value,additional_effort:effort.value,evidence_ids:refs.value.split(',').map(id=>id.trim()).filter(Boolean)};
+        feedbackMap!.set(feedbackKey,appendFeedback(report,file,entry));show();
+      }catch(error){status.textContent=error instanceof Error?error.message:'Unable to save feedback';}};
     }
     function paintScope() {
       const filtered=selectScope(report,(byId('agent-filter') as HTMLSelectElement).value);
@@ -563,7 +481,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
         line(tr,'td',session.coverage.usage);
         line(tr,'td',formatNumber(session.usage.total_tokens),'numeric');
         line(tr,'td',formatNumber(session.metrics.tool_call_count),'numeric');
-        line(tr,'td',formatNumber(session.metrics.tool_error_count),'numeric');
+        line(tr,'td',formatNumber(session.metrics.tool_error_count)+' observed ('+(session.coverage.observations?.errors??'coverage unknown')+')','numeric');
       });
       byId('no-sessions').hidden=filtered.sessions.length!==0;
       paintInspector(filtered.sessions.find(session=>session.id===selected));
@@ -614,7 +532,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       [...findingGroups.values()].sort((a,b)=>b.length-a.length).forEach(group=>{
         const finding=group[0]!;
         const ordinary=activityRules.has(finding.rule_id);
-        const card=line(ordinary?activity:findings,'article',undefined,'card');
+        const card=line(ordinary?activity:findings,'article',undefined,ordinary?'card':'card review-card');
         line(card,'h3',`${finding.title} · ${group.length} ${group.length===1?'occurrence':'occurrences'}`);
         line(card,'p',ordinary?'Activity only — not an improvement recommendation.':'Review candidate — usefulness requires context.','muted');
         line(card,'p',finding.interpretation);
@@ -644,12 +562,13 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       });
       [...recommendationGroups.values()].sort((a,b)=>b.length-a.length).forEach(group=>{
         const rec=group[0]!;
-        const card=line(recs,'article',undefined,'card'); line(card,'h3',rec.title);
+        const card=line(recs,'article',undefined,'card suggestion-card'); line(card,'h3',rec.title);
         line(card,'p',`${rec.kind} · ${rec.priority} priority · ${group.length} ${group.length===1?'occurrence':'occurrences'}`,'muted');
-        line(card,'p',rec.action);
+        line(card,'p',rec.action,'suggestion-action');
         const linked=filtered.findings.filter(item=>group.some(rec=>rec.finding_ids.includes(item.id)));
         const support=line(card,'details');line(support,'summary','Why this is suggested · evidence');
         linked.forEach(finding=>paintFinding(support,finding));
+        group.forEach(item=>feedbackForm(card,item));
         if(group.length>1){
           const details=line(card,'details');line(details,'summary',`Linked findings (${group.length})`);
           group.forEach(item=>line(details,'p',`${item.id} · ${item.finding_ids.join(', ')}`));
@@ -675,11 +594,22 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       const tbody=line(t,'tbody');
       data.forEach(row=>{const tr=line(tbody,'tr');values(row).forEach(val=>line(tr,'td',val));});
     }
-    table('tools',['Tool','Calls','Errors','Output characters'],report.metrics.tools,t=>[t.name,formatNumber(t.calls),formatNumber(t.errors),formatNumber(t.output_chars)]);
-    table('skills',['Skill','Loads','States'],report.metrics.skills,s=>[s.name,formatNumber(s.loads),s.states.join(', ') || 'Unknown']);
+    table('tools',['Tool','Calls','Observed errors (may be partial)','Output characters'],report.metrics.tools,t=>[t.name,formatNumber(t.calls),formatNumber(t.errors),formatNumber(t.output_chars)]);
+    table('skills',['Skill','Confirmed loads (may be partial)','States'],report.metrics.skills,s=>[s.name,formatNumber(s.loads),s.states.join(', ') || 'Unknown']);
     const notes=clear('analysis-notes');
     line(notes,'p',`Analysis: ${report.analysis_usage.mode} · model tokens: ${formatNumber(report.analysis_usage.model_tokens)}`);
     report.analysis_usage.notes.forEach(note=>line(notes,'p',note));
+    const feedbackPanel=line(notes,'details');line(feedbackPanel,'summary','Local feedback files');
+    line(feedbackPanel,'p','Feedback stays in memory until you explicitly export it. Import requires the same report and recommendation fingerprints.');
+    const feedbackStatus=line(feedbackPanel,'p');
+    const exportFeedback=line(feedbackPanel,'button','Export feedback JSON');exportFeedback.setAttribute('type','button');
+    exportFeedback.onclick=()=>{try{const file=feedbackForReport();validateFeedback(report,file);const link=line(feedbackPanel,'a','Download feedback.json') as HTMLAnchorElement;link.href='data:application/json;charset=utf-8,'+encodeURIComponent(JSON.stringify(file,null,2));link.download='feedback.json';feedbackStatus.textContent='Use the download link to save feedback locally.';}catch(error){feedbackStatus.textContent=error instanceof Error?error.message:'Unable to export feedback';}};
+    const importLabel=line(feedbackPanel,'label','Import feedback JSON');const importFeedback=line(importLabel,'input') as HTMLInputElement;importFeedback.type='file';importFeedback.accept='.json,application/json';
+    importFeedback.onchange=async()=>{try{const file=importFeedback.files?.[0];if(!file)return;if(file.size>MAX_FILE_BYTES)throw new Error('Feedback exceeds 20 MiB');const value:unknown=JSON.parse(await file.text());if(reportGenerations.get(doc!)!==generation)return;validateFeedback(report,value);
+      const current=feedbackForReport(),ids=new Map(current.entries.map(e=>[e.id,e]));let merged=current;
+      for(const entry of value.entries){const existing=ids.get(entry.id);if(existing){if(JSON.stringify(existing)!==JSON.stringify(entry))throw new Error('Conflicting feedback ID');continue;}merged=appendFeedback(report,merged,entry);ids.set(entry.id,entry);}
+      feedbackMap!.set(feedbackKey,merged);paintScope();feedbackStatus.textContent=`Imported ${value.entries.length} feedback records.`;
+    }catch(error){feedbackStatus.textContent=error instanceof Error?error.message:'Unable to import feedback';}};
     (byId('agent-filter') as HTMLSelectElement).onchange=paintScope;
     workspace.sourcesChanged=()=>{
       if(reportGenerations.get(doc!)!==generation)return;
@@ -804,7 +734,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       catch(cause){error(cause instanceof Error?cause.message:'Unable to open report.');}
     }
     get('clear-button').addEventListener('click',()=>{if(workspace.active!==null)removeReport(workspace.active);});
-    get('workspace-clear').addEventListener('click',()=>{
+    get('workspace-clear').addEventListener('click',()=>{feedbackFiles.delete(doc!);
       workspace.epoch++;workspace.reports=[];workspace.sources.clear();workspace.active=null;
       hideReport();refresh();get('import-error').hidden=true;get('import-status').textContent='';
       (get('report-file') as HTMLInputElement).value='';

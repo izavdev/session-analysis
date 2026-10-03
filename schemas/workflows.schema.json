@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Explicit contextual reusable workflow assessments",
+  "type": "object",
+  "required": [
+    "groups"
+  ],
+  "properties": {
+    "groups": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "trigger",
+          "conditions",
+          "decisions",
+          "outputs",
+          "applicability",
+          "uncertainty",
+          "kind",
+          "episode_ids",
+          "evidence_ids",
+          "equivalent",
+          "acceptance_tests",
+          "existing_skill_id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "trigger": {
+            "type": "string",
+            "minLength": 1
+          },
+          "conditions": {
+            "type": "string",
+            "minLength": 1
+          },
+          "decisions": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outputs": {
+            "type": "string",
+            "minLength": 1
+          },
+          "applicability": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uncertainty": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "script",
+              "template",
+              "skill"
+            ]
+          },
+          "episode_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 2,
+            "uniqueItems": true
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "equivalent": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "acceptance_tests": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 1,
+            "uniqueItems": true
+          },
+          "existing_skill_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

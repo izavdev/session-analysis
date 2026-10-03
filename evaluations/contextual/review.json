@@ -1,0 +1,84 @@
+{
+  "reviewed": 4,
+  "unreviewed": [
+    "missing-source",
+    "repeated-request",
+    "transient-retry",
+    "changed-state",
+    "failed-skill-read",
+    "analyzer-activity",
+    "instruction-text",
+    "ordinary-task"
+  ],
+  "review_method": "Same-agent self-review on four selected contextual packets; not independent or blinded. No user intervention trial.",
+  "rows": [
+    {
+      "case_id": "supported-search",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 4,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Specific contextual change with applicability, uncertainty and correctness test. Same-agent review cannot establish user usefulness."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "ordinary-correction",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 4,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Specific contextual change with applicability, uncertainty and correctness test. Same-agent review cannot establish user usefulness."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "same-retries",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Necessary activity/recovery is explained without unsupported advice or verified-task claims."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "necessary-read",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 4,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Necessary activity/recovery is explained without unsupported advice or verified-task claims."
+        }
+      ],
+      "disagreement": false
+    }
+  ]
+}

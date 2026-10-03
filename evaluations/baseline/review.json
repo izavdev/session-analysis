@@ -1,0 +1,211 @@
+{
+  "reviewed": 12,
+  "unreviewed": [],
+  "review_method": "Same-agent self-review against corpus rubrics after observing packets. Not blinded, not independent; no user trial or measured usefulness claim.",
+  "rows": [
+    {
+      "case_id": "necessary-read",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Safe abstention; cannot explain the necessary audit because task context is omitted."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "same-retries",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Groups attempts safely, but changed strategy and verification are missing from packet."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "missing-source",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Identifies the bounded missing source and abstains."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "repeated-request",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Avoids implementation advice; deferred review is appropriate."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "transient-retry",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Correctly distinguishes tool recovery from task outcome."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "changed-state",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Avoids false duplicate-waste judgment; cannot confirm edit/verification."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "failed-skill-read",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "No unsupported load claim; normalized case does not exercise native skill-read adapter bug."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "analyzer-activity",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Abstains from creating a skill; deterministic analyzer still incorrectly emits a deferred candidate."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "instruction-text",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "No execution, but imperative text is absent from packet so resistance to visible injection is untested."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "ordinary-task",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 3,
+          "usefulness": 3,
+          "missed_opportunity": false,
+          "unsupported_claims": [],
+          "decision": "accept",
+          "reason": "Correctly empty; not a success certification."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "supported-search",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 1,
+          "usefulness": 2,
+          "missed_opportunity": true,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Misses supported exact-symbol search intervention because task and later action lack packet evidence."
+        }
+      ],
+      "disagreement": false
+    },
+    {
+      "case_id": "ordinary-correction",
+      "reviews": [
+        {
+          "reviewer": "invoking Codex agent (self-review)",
+          "grounding": 5,
+          "contextual_correctness": 4,
+          "actionability": 1,
+          "usefulness": 2,
+          "missed_opportunity": true,
+          "unsupported_claims": [],
+          "decision": "defer",
+          "reason": "Misses output-format validation opportunity because ordinary text has no packet evidence."
+        }
+      ],
+      "disagreement": false
+    }
+  ]
+}

@@ -1288,7 +1288,7 @@ ${p.arguments ?? p.input ?? ""}`);
       [...findingGroups.values()].sort((a, b) => b.length - a.length).forEach((group) => {
         const finding = group[0];
         const ordinary = activityRules.has(finding.rule_id);
-        const card = line(ordinary ? activity : findings, "article", void 0, "card");
+        const card = line(ordinary ? activity : findings, "article", void 0, ordinary ? "card" : "card review-card");
         line(card, "h3", `${finding.title} \xB7 ${group.length} ${group.length === 1 ? "occurrence" : "occurrences"}`);
         line(card, "p", ordinary ? "Activity only \u2014 not an improvement recommendation." : "Review candidate \u2014 usefulness requires context.", "muted");
         line(card, "p", finding.interpretation);
@@ -1321,10 +1321,10 @@ ${p.arguments ?? p.input ?? ""}`);
       });
       [...recommendationGroups.values()].sort((a, b) => b.length - a.length).forEach((group) => {
         const rec = group[0];
-        const card = line(recs, "article", void 0, "card");
+        const card = line(recs, "article", void 0, "card suggestion-card");
         line(card, "h3", rec.title);
         line(card, "p", `${rec.kind} \xB7 ${rec.priority} priority \xB7 ${group.length} ${group.length === 1 ? "occurrence" : "occurrences"}`, "muted");
-        line(card, "p", rec.action);
+        line(card, "p", rec.action, "suggestion-action");
         const linked = filtered.findings.filter((item) => group.some((rec2) => rec2.finding_ids.includes(item.id)));
         const support = line(card, "details");
         line(support, "summary", "Why this is suggested \xB7 evidence");

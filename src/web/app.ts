@@ -532,7 +532,7 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       [...findingGroups.values()].sort((a,b)=>b.length-a.length).forEach(group=>{
         const finding=group[0]!;
         const ordinary=activityRules.has(finding.rule_id);
-        const card=line(ordinary?activity:findings,'article',undefined,'card');
+        const card=line(ordinary?activity:findings,'article',undefined,ordinary?'card':'card review-card');
         line(card,'h3',`${finding.title} · ${group.length} ${group.length===1?'occurrence':'occurrences'}`);
         line(card,'p',ordinary?'Activity only — not an improvement recommendation.':'Review candidate — usefulness requires context.','muted');
         line(card,'p',finding.interpretation);
@@ -562,9 +562,9 @@ const root: Window | undefined = typeof window === 'undefined' ? undefined : win
       });
       [...recommendationGroups.values()].sort((a,b)=>b.length-a.length).forEach(group=>{
         const rec=group[0]!;
-        const card=line(recs,'article',undefined,'card'); line(card,'h3',rec.title);
+        const card=line(recs,'article',undefined,'card suggestion-card'); line(card,'h3',rec.title);
         line(card,'p',`${rec.kind} · ${rec.priority} priority · ${group.length} ${group.length===1?'occurrence':'occurrences'}`,'muted');
-        line(card,'p',rec.action);
+        line(card,'p',rec.action,'suggestion-action');
         const linked=filtered.findings.filter(item=>group.some(rec=>rec.finding_ids.includes(item.id)));
         const support=line(card,'details');line(support,'summary','Why this is suggested · evidence');
         linked.forEach(finding=>paintFinding(support,finding));

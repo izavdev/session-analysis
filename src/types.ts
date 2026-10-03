@@ -129,6 +129,7 @@ export interface InterpretationProvenance {
 }
 
 export interface TaskEpisode {
+  request_kind?:'task'|'analyzer'|'control'|'unknown';
   id:string;
   session_id:string;
   request_evidence_id:string|null;

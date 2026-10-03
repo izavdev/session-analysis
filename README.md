@@ -124,6 +124,27 @@ and unassessed comparability are flagged. Partial or unallocated session usage y
 Maintenance decisions are keep/revise/retire/revisit proposals with evidence and uncertainty.
 The automated full-loop example is synthetic, not a user intervention trial.
 
+## Contextual reusable workflows
+
+Exact wording is a cheap deferred signal; internal punctuation is preserved and explicit
+analyzer invocations/control requests are excluded. Development work on this toolkit remains
+eligible. Equivalent wording does not establish equivalent tasks.
+
+```sh
+session-analysis workflows reviewed-context.json groups.json -o workflows.json
+# Optional explicitly selected feedback and existing skill metadata:
+session-analysis workflows reviewed-context.json groups.json --feedback feedback.json --existing-skills selected-skills.json -o workflows.json
+```
+
+The [workflow assessment schema](schemas/workflows.schema.json) describes caller-supplied
+groups of selected episodes, including varied wording, conditions, decisions, outputs,
+applicability, uncertainty and tests. The toolkit does not call a semantic model or scan skills.
+Script/template/skill classification is reviewer-supplied. Non-equivalent groups produce no
+candidate; unverified or untried groups stay deferred. Actionable groups require reviewed
+verified outcomes and relevant observed-test feedback with correctness preserved. Existing
+skill metadata is an explicit list of `{id, title, applicability, source_sha256}`; authorized
+overlap can produce an extension proposal. No procedure is created or installed automatically.
+
 ## Portable skill
 
 ### Install with the cross-agent wizard

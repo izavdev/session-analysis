@@ -92,6 +92,16 @@ For a skill candidate, supply `id`, `title`, `trigger`, `session_ids`, `evidence
 
 Repeated request wording alone supports **at most a deferred candidate** (`recommendation: "defer"`), not an implementation recommendation. Its rationale must name the missing evidence of equivalent task conditions, reusable decisions and useful outputs; its acceptance tests must define how to check them. Exclude injected metadata (such as Claude `isMeta` rows) and identifiable analyzer activity. Do not infer skill non-use or recommend new skills from load counts or absent telemetry.
 
+For optional contextual grouping, prepare `groups` using the toolkit's workflow assessment
+schema and run `workflows REPORT.json GROUPS.json -o REVIEWED.json`. Cite each selected
+request and its context; compare conditions, decisions and outputs instead of treating
+wording as equivalence. Set `equivalent: false` for materially different requirements.
+Choose script for deterministic steps, template for stable output, or skill for judgment.
+Unknown outcomes/usefulness keep groups deferred. Actionable groups require reviewer-verified
+episodes plus relevant local observed-test feedback (`--feedback FILE`). Overlap may use only
+explicitly selected skill metadata (`--existing-skills FILE`); do not discover private skills.
+This registers proposals, never creates or installs interventions.
+
 ## Completion boundary
 
 Never write or modify `metrics`, `summary`, session usage, coverage, privacy, or report provenance in an interpretation. Tool-result sizes are **characters**; token and cost impact were not measured separately. Unknowns remain unknown. The CLI validator checks structure and references; it cannot prove the semantic truth or usefulness of an explanation. Use the [acceptance cases](acceptance.md) to evaluate actual model outputs separately; do not call link, schema or frontmatter checks a behavioral evaluation.

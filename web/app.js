@@ -219,7 +219,10 @@
       const episodes = arr(r.episodes, "episodes");
       unique(episodes, "episodes");
       for (const entry of episodes) {
-        const e = obj(entry, ["id", "session_id", "request_evidence_id", "action_evidence_ids", "correction_evidence_ids", "verification_evidence_ids", "evidence_ids", "boundary", "limitations", "outcome"], "episode");
+        const episodeFields = ["id", "session_id", "request_evidence_id", "action_evidence_ids", "correction_evidence_ids", "verification_evidence_ids", "evidence_ids", "boundary", "limitations", "outcome"];
+        if (entry && typeof entry === "object" && Object.hasOwn(entry, "request_kind")) episodeFields.push("request_kind");
+        const e = obj(entry, episodeFields, "episode");
+        if (e.request_kind !== void 0) en(e.request_kind, ["task", "analyzer", "control", "unknown"], "episode.request_kind");
         str(e.id, "episode.id");
         if (!sids.has(e.session_id)) fail("episode.session_id");
         const ee = refs(e.evidence_ids, evids, "episode.evidence_ids");

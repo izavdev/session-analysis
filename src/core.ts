@@ -1,5 +1,6 @@
 import {createHash} from 'node:crypto';
 import type {NormalizedEvent, NormalizedSession, Report, ReportSession, Finding, Recommendation, Evidence, SkillCandidate, Usage} from './types.js';
+import {isAnalyzerActivity,isSessionControl} from './activity.js';
 import {taskEpisodes} from './episodes.js';
 import {BUILD} from './build-info.js';
 import type {InterpretationProvenance} from './types.js';
@@ -16,14 +17,6 @@ function sourceRef(e:NormalizedEvent):string {return /^(?:line|message|event|row
 function redact(text:string):string {return text.replace(/https?:\/\/\S+/g,'[URL]').replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[EMAIL]').replace(/(?<!\w)(?:\/[^\s/]+){2,}/g,'[PATH]').replace(/\b[A-Za-z]:\\(?:[^\\\s]+\\)+[^\\\s]+/g,'[PATH]').replace(/\b(?:sk-|ghp_|github_pat_)[A-Za-z0-9_-]{12,}/g,'[TOKEN]');}
 function excerpt(text:string):string {return redact(text).slice(0,240);}
 const usageFields=(['input_tokens','output_tokens','cache_read_tokens','cache_write_tokens','reasoning_tokens','total_tokens'] as const);
-function isSessionControl(text:string):boolean {
-  // Match before task-text normalization removes slash/markup distinctions.
-  // Keep controls in the timeline, but do not treat session housekeeping as reusable work.
-  const value=text.trim();
-  return /^\/(?:clear|compact)(?:\s+[^\n]*)?$/i.test(value) ||
-    /^<command-name>\/(?:clear|compact)<\/command-name>\s*(?:<command-message>[^<]*<\/command-message>\s*)?(?:<command-args>[\s\S]*?<\/command-args>\s*)?$/i.test(value);
-}
-
 /** Deterministic local rules, with no transcript excerpts unless explicitly requested. */
 export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Report {
   const excluded:Report['scope']['excluded_sessions']=[],seen=new Map<string,string>(), accepted:NormalizedSession[]=[];
@@ -114,8 +107,8 @@ export function analyze(sessions:NormalizedSession[],includeExcerpts=false):Repo
   report.metrics.tools=[...tools.values()].sort((a,b)=>a.name.localeCompare(b.name));
   const requests=new Map<string,Array<[string,NormalizedEvent]>>();
   for(const [i,s] of accepted.entries()) for(const e of s.events) if(e.type==='user') {
-    if(isSessionControl(e.text))continue;
-    const normalized=e.text.toLowerCase().split(/\s+/).join(' ').replace(/[^\p{L}\p{N}_\s]/gu,'').trim();
+    if(isSessionControl(e.text)||isAnalyzerActivity(e.text))continue;
+    const normalized=e.text.toLowerCase().split(/\s+/).join(' ').trim().replace(/[.!?]+$/u,'');
     if(normalized){const hash=digest(normalized),group=requests.get(hash)??[];group.push([resultSessions[i]!.id,e]);requests.set(hash,group);}
   }
   for(const [hash,occurrences] of requests) {const sids=[...new Set(occurrences.map(([sid])=>sid))];if(sids.length<2) continue;

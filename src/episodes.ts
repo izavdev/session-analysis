@@ -1,3 +1,4 @@
+import {isAnalyzerActivity,isSessionControl} from './activity.js';
 import {createHash} from 'node:crypto';
 import type {NormalizedSession, Report, TaskEpisode} from './types.js';
 import {validateReport} from './validation.js';
@@ -14,7 +15,7 @@ export function taskEpisodes(source:NormalizedSession,report:Report,selected:Set
     const ref=evidence.get(eid);if(!ref) continue;
     const correction=e.type==='user'&&/\b(?:that is not|that's not|you missed|you forgot|instead of|please use the requested|not what I asked)\b/i.test(e.text);
     if(!current||(e.type==='user'&&!correction)) {
-      current={id:'episode:'+hash([sid,e.id]),session_id:sid,request_evidence_id:e.type==='user'?ref:null,action_evidence_ids:[],correction_evidence_ids:[],verification_evidence_ids:[],evidence_ids:[],boundary:e.type==='user'?'request':'partial',limitations:e.type==='user'?[]:['Request missing or selection/compaction interrupted the episode.'],outcome:{state:'unknown',basis:'unassessed',criteria:null,evidence_ids:[],reviewer:null}};
+      current={id:'episode:'+hash([sid,e.id]),session_id:sid,request_kind:e.type==='user'?isAnalyzerActivity(e.text)?'analyzer':isSessionControl(e.text)?'control':'task':'unknown',request_evidence_id:e.type==='user'?ref:null,action_evidence_ids:[],correction_evidence_ids:[],verification_evidence_ids:[],evidence_ids:[],boundary:e.type==='user'?'request':'partial',limitations:e.type==='user'?[]:['Request missing or selection/compaction interrupted the episode.'],outcome:{state:'unknown',basis:'unassessed',criteria:null,evidence_ids:[],reviewer:null}};
       episodes.push(current);
     }
     current.evidence_ids.push(ref);

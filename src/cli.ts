@@ -2,6 +2,8 @@
 import {existsSync, mkdirSync, readFileSync, realpathSync, statSync, writeFileSync} from 'node:fs';
 import {dirname, isAbsolute, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {assessWorkflows} from './workflows.js';
+import type {ExistingSkill} from './workflows.js';
 import {analyzeFeedback,compareTrial} from './feedback-analysis.js';
 import type {ReviewedSample,Trial} from './feedback-analysis.js';
 import {createFeedback,feedbackDraft,appendFeedback,validateFeedback} from './feedback.js';
@@ -17,12 +19,13 @@ import type {AgentName} from './types.js';
 
 const HELP = `Session Analysis — local-first diagnostics (no network or model calls)
 Usage: session-analysis <command> [options]
-Commands: discover, analyze, validate, packet, context, outcome, feedback-template, feedback-add, feedback-validate, feedback-export, feedback-analyze, trial, merge, export
+Commands: discover, analyze, validate, packet, context, outcome, feedback-template, feedback-add, feedback-validate, feedback-export, feedback-analyze, trial, workflows, merge, export
   discover [--agent all|claude_code|codex|hermes] [--root DIRECTORY]
   analyze FILE_OR_DIR... -o REPORT.json [--agent auto|claude_code|codex|hermes] [--session-id AGENT:ID] [--include-excerpts]
   validate REPORT.json
   packet REPORT.json -o PACKET.json [--max-chars 12000]
   context REPORT.json SOURCE --event-id AGENT:SESSION:EVENT -o CONTEXT.json [--include-excerpts]
+  workflows REPORT.json GROUPS.json -o REVIEWED.json [--feedback FEEDBACK.json] [--existing-skills SELECTED_METADATA.json]
   feedback-analyze SELECTED_SAMPLES.json -o SUMMARY.json
   trial BASELINE.json FOLLOWUP.json TRIAL.json -o COMPARISON.json
   feedback-template REPORT.json -o FEEDBACK.json [--recommendation-id ID]
@@ -37,7 +40,7 @@ Commands: discover, analyze, validate, packet, context, outcome, feedback-templa
 interface Parsed {positionals: string[]; options: Map<string, string[]>; switches: Set<string>}
 function parse(rest: string[]): Parsed {
   const result: Parsed = {positionals: [], options: new Map(), switches: new Set()};
-  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id','--interpretation-metadata','--recommendation-id']);
+  const valued = new Set(['-o', '--output', '--agent', '--root', '--session-id', '--max-chars', '--event-id', '--finding-id','--interpretation-metadata','--recommendation-id','--feedback','--existing-skills']);
   for (let i = 0; i < rest.length; i++) {
     const part = rest[i]!;
     if (valued.has(part)) {
@@ -127,6 +130,11 @@ export function main(argv: string[] = process.argv.slice(2)): number {
       const report = analyze(chosen, parsed.switches.has('--include-excerpts'));
       validateReport(report);
       writeOutput(dest, report);
+    } else if(command==='workflows') {
+      requireCount(parsed.positionals,2,command);const report=readJson(parsed.positionals[0]!);validateReport(report);
+      const feedbackPath=option(parsed,'--feedback'),skillsPath=option(parsed,'--existing-skills');const inputs=[...parsed.positionals,...(feedbackPath?[feedbackPath]:[]),...(skillsPath?[skillsPath]:[])];const dest=output(parsed);ensureDistinct(dest,inputs);
+      const existing=skillsPath?readJson(skillsPath):[];if(!Array.isArray(existing))throw new Error('Expected explicitly selected skill metadata list');
+      writeOutput(dest,assessWorkflows(report,readJson(parsed.positionals[1]!),feedbackPath?readJson(feedbackPath) as FeedbackFile:undefined,existing as ExistingSkill[]));
     } else if(command==='feedback-analyze') {
       requireCount(parsed.positionals,1,command);const selected=readJson(parsed.positionals[0]!) as {samples:ReviewedSample[];opportunities?:Array<{id:string;found:boolean|null}>};
       if(!selected||!Array.isArray(selected.samples))throw new Error('Expected explicitly selected report/feedback samples');const dest=output(parsed);ensureDistinct(dest,parsed.positionals);writeOutput(dest,analyzeFeedback(selected.samples,selected.opportunities));

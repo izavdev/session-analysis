@@ -555,6 +555,14 @@
               }
             },
             "additionalProperties": false
+          },
+          "request_kind": {
+            "enum": [
+              "task",
+              "analyzer",
+              "control",
+              "unknown"
+            ]
           }
         },
         "additionalProperties": false
